@@ -51,6 +51,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   const [playing, setPlaying] = useState(false);
   const [volume, setVolume] = useState(100);
   const [muted, setMuted] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const playingRef = useRef(playing);
   playingRef.current = playing;
 
@@ -144,10 +145,6 @@ const MoviePlayer = forwardRef(function MoviePlayer(
           onReady: () => {
             ytPlayerRef.current = player;
             try { player.setVolume(volumeRef.current); } catch {}
-            const rect = ytContainerRef.current?.getBoundingClientRect?.();
-            if (rect && rect.width > 0 && rect.height > 0) {
-              try { player.setSize(rect.width, rect.height); } catch {}
-            }
             setYtReady(true);
             setYtError(false);
             applyCurrentState();
@@ -182,7 +179,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
       setYtReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [youtubeId]);
+  }, [youtubeId, reloadKey]);
 
   useEffect(() => {
     const iv = setInterval(() => {
@@ -256,6 +253,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   }
 
   function onStageClick(e) {
+    if (e.target.closest(".cf-player-bar, .cf-play-big")) return;
     if (e.detail === 2) {
       clearTimeout(clickTimer.current);
       onToggleFullscreen?.();
@@ -272,9 +270,9 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   const mediaReady = youtubeId ? ytReady : !ytError;
 
   return (
-    <div className="movie cf-player" style={{ aspectRatio: ratio }}>
+    <div className="movie cf-player" style={{ aspectRatio: ratio }} onClick={onStageClick}>
       {youtubeId ? (
-        <div ref={ytContainerRef} className="cf-frame" />
+        <div key={reloadKey} ref={ytContainerRef} className="cf-frame" />
       ) : (
         <video
           ref={videoRef}
@@ -290,8 +288,6 @@ const MoviePlayer = forwardRef(function MoviePlayer(
           onEnded={() => { setPlaying(false); if (roleRef.current === "host") sync(false, videoRef.current?.currentTime || 0); }}
         />
       )}
-
-      <div className="cf-stage" onClick={onStageClick} />
 
       {ytError && (
         <div className="cf-error">
@@ -340,6 +336,11 @@ const MoviePlayer = forwardRef(function MoviePlayer(
             title="Volume"
             aria-label="Volume"
           />
+          <button
+            className="cf-btn"
+            onClick={() => { if (youtubeId) { setPlaying(false); setReloadKey((k) => k + 1); } }}
+            title="Reload video (fixes a frozen black frame)"
+          >⟳</button>
           <button className="cf-btn" onClick={onToggleFullscreen} title="Fullscreen">⛶</button>
         </div>
       </div>

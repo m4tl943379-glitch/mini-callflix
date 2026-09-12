@@ -112,16 +112,10 @@ button { cursor: pointer; }
   position: absolute; top: 0; left: 0;
   width: 100% !important; height: 100% !important;
   border: 0; display: block;
-  transform: translateZ(0);
 }
 .cf-frame iframe { pointer-events: none; }
 .cf-frame video { object-fit: contain; background: #000; pointer-events: auto; }
-/* click layer sits BELOW the video in paint order (no occlusion of the iframe)
-   but still receives clicks because the iframe has pointer-events: none */
-.cf-stage {
-  position: absolute; inset: 0; z-index: 2; cursor: pointer;
-  background: transparent;
-}
+.cf-player { cursor: pointer; }
 .cf-error {
   position: absolute; inset: 0; z-index: 4;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
