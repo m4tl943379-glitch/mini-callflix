@@ -48,6 +48,7 @@ function App() {
   const [roomIdInput, setRoomIdInput] = useState("");
   const [roomId, setRoomId] = useState("");
   const [role, setRole] = useState("");
+  const [socketId, setSocketId] = useState(null);
   const [roomState, setRoomState] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -95,6 +96,13 @@ function App() {
   }, [pathRoomId]);
 
   useEffect(() => {
+    const onConnect = () => setSocketId(socket.id);
+    socket.on("connect", onConnect);
+    if (socket.connected) setSocketId(socket.id);
+    return () => socket.off("connect", onConnect);
+  }, []);
+
+  useEffect(() => {
     const onJoined = ({ participant, state }) => {
       setRoomState(state);
       setNotice(`${participant.name} joined the room.`);
@@ -127,10 +135,6 @@ function App() {
 
     const onMedia = ({ cameraEnabled, micEnabled, role: remoteRole }) => {
       setNotice(`${remoteRole === "host" ? "Host" : "Guest"} media updated.`);
-    };
-
-    const onPlayback = (state) => {
-      setPlayback(state);
     };
 
     const onChat = (item) => setMessages((prev) => [...prev, item]);
@@ -183,7 +187,6 @@ function App() {
     socket.on("webrtc:answer", onAnswer);
     socket.on("webrtc:ice", onIce);
     socket.on("media:state", onMedia);
-    socket.on("playback:state", onPlayback);
     socket.on("movie:url", onMovieUrl);
     socket.on("room:expired", onExpired);
     socket.on("chat:message", onChat);
@@ -196,7 +199,6 @@ function App() {
       socket.off("webrtc:answer", onAnswer);
       socket.off("webrtc:ice", onIce);
       socket.off("media:state", onMedia);
-      socket.off("playback:state", onPlayback);
       socket.off("movie:url", onMovieUrl);
       socket.off("room:expired", onExpired);
       socket.off("chat:message", onChat);
@@ -332,16 +334,10 @@ function App() {
     socket.emit("media:state", { roomId, ...media, micEnabled: next });
   }
 
-  function sendPlayback(playing, time) {
-    if (role !== "host") return;
-    socket.emit("playback:state", { roomId, playing, time });
-  }
-
-  const handlePlayerPlayback = useCallback(
-    (playing, time) => sendPlayback(playing, time),
+  const handlePlayerPlayback = useCallback((playing, time) => {
+    setPlayback({ playing, time });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [role, roomId]
-  );
+  }, []);
 
   function startMovie() {
     playerRef.current?.play();
@@ -557,10 +553,12 @@ function App() {
               <MoviePlayer
                 ref={playerRef}
                 url={movieUrl}
-                role={role}
                 playback={playback}
                 onPlayback={handlePlayerPlayback}
                 onToggleFullscreen={toggleFullscreen}
+                io={socket}
+                selfId={socketId}
+                roomId={roomId}
               />
             </div>
 

@@ -18,6 +18,8 @@ const io = new Server(server, {
 const rooms = new Map();
 const ROOM_IDLE_TTL_MS = Number(process.env.ROOM_IDLE_TTL_MS) || 30 * 60 * 1000;
 
+const FILM_ACTION_TYPES = new Set(["play", "pause", "seek"]);
+
 function cancelRoomCleanup(roomId) {
   const room = rooms.get(roomId);
   if (!room?.cleanupTimer) return;
@@ -165,17 +167,40 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("playback:state", ({ roomId, playing, time }) => {
+  // Film sync: both participants are leaders. The server only relays the action
+  // (stamped with the sender id for loop protection) and remembers the last state
+  // so a late joiner can resume at the same time.
+  socket.on("film:action", ({ roomId, type, currentTime }) => {
     const room = rooms.get(roomId);
-    if (!room || socket.data.roomId !== roomId || socket.data.role !== "host") return;
+    if (!room || socket.data.roomId !== roomId) return;
+    if (!FILM_ACTION_TYPES.has(type)) return;
+    const time = Number(currentTime);
+    if (!Number.isFinite(time) || time < 0) return;
 
-    room.playback = {
+    if (type === "seek") {
+      room.playback = { ...room.playback, time, updatedAt: Date.now() };
+    } else {
+      room.playback = { playing: type === "play", time, updatedAt: Date.now() };
+    }
+
+    socket.to(roomId).emit("film:action", {
+      type,
+      currentTime: time,
+      timestamp: Date.now(),
+      from: socket.id
+    });
+  });
+
+  // Lightweight periodic beat so both leaders re-converge on drift.
+  socket.on("film:sync", ({ roomId, currentTime, playing }) => {
+    if (socket.data.roomId !== roomId) return;
+    const time = Number(currentTime);
+    if (!Number.isFinite(time) || time < 0) return;
+    socket.to(roomId).emit("film:sync", {
+      currentTime: time,
       playing: Boolean(playing),
-      time: Math.max(0, Number(time) || 0),
-      updatedAt: Date.now()
-    };
-
-    socket.to(roomId).emit("playback:state", room.playback);
+      from: socket.id
+    });
   });
 
   socket.on("movie:set", ({ roomId, movieUrl }) => {
@@ -183,6 +208,7 @@ io.on("connection", (socket) => {
     if (!room || socket.data.roomId !== roomId || socket.data.role !== "host") return;
 
     room.movieUrl = sanitizeMovieUrl(movieUrl);
+    room.playback = { playing: false, time: 0, updatedAt: Date.now() };
     io.to(roomId).emit("movie:url", { movieUrl: room.movieUrl });
   });
 

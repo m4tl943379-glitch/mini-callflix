@@ -38,15 +38,15 @@ Vérification syntaxe serveur : `node --check server/server.js`.
 
 ## Protocole Socket.IO (événements)
 
-Client → serveur : `room:create`, `room:join`, `webrtc:offer|answer|ice`, `media:state`, `playback:state` (hôte), `movie:set` (hôte), `chat:message`, `reaction:send`, `room:leave`.
+Client → serveur : `room:create`, `room:join`, `webrtc:offer|answer|ice`, `media:state`, `film:action` (les 2 membres sont leaders), `film:sync`, `movie:set` (hôte), `chat:message`, `reaction:send`, `room:leave`.
 
-Serveur → client : `room:participant-joined`, `room:participant-left`, `room:expired`, `webrtc:offer|answer|ice`, `media:state`, `playback:state`, `movie:url`, `chat:message`, `reaction:show`.
+Serveur → client : `room:participant-joined`, `room:participant-left`, `room:expired`, `webrtc:offer|answer|ice`, `media:state`, `film:action` (avec `from` = socket id émetteur), `film:sync`, `movie:url`, `chat:message`, `reaction:show`.
 
-Règles serveur : max 2 participants par room ; seul l'hôte change `playback:state` et `movie:set` ; les URL de film n'acceptent que `http(s)://`, `/chemin` ou vide.
+Règles serveur : max 2 participants par room ; les URL de film n'acceptent que `http(s)://`, `/chemin` ou vide ; seul l'hôte change le film (`movie:set`, reset l'état à 0) ; `film:action` est accepté des 2 membres (2 leaders, anti-boucle via `from` + `mirror` client), le serveur mémorise `{playing, time, updatedAt}` et l'envole aux arrivants (ack de join).
 
 ## Flashs de conception clés
 
-- MoviePlayer choisit automatiquement : lien YouTube → lecteur IFrame (hôte autoritaire, contrôles nativés ; invité sans contrôles), sinon `<video>` local. L'invité se recale sur `playback` au chargement et à chaque `playback:state`.
+- MoviePlayer choisit automatiquement : lien YouTube → lecteur IFrame (contrôles CALLFLIX custom, 2 leaders), sinon `<video>` local. Anti-boucle : le client ignore les messages dont `from` = son propre socket id et pose `mirror` pendant l'application d'une action distante (pas de ré-émission). Synchronisation : actions `film:action` (play/pause/seek, reseek seulement si dérive > 1 s) + heartbeat `film:sync` toutes les 8 s (recal si dérive > 1,5 s) + état initial reçu au join.
 - Rooms **en mémoire** : redémarrage du serveur = rooms effacées. Une room vide est supprimée immédiatement ; une room à 1 participant est supprimée après `ROOM_IDLE_TTL_MS`.
 - WebRTC : le client récupère sa config ICE au runtime via `GET /api/ice-config` (serveur) et retombe sur une liste en dur dans `App.jsx` si le fetch échoue. Défaut : 4 serveurs STUN publics (Google x2, Cloudflare, OpenRelay) + TURN OpenRelay (`:80` UDP/TCP + `turns:443`). La config TURN peut être changée par env Render (`TURN_URLS`/`TURN_USERNAME`/`TURN_CREDENTIAL`) **sans redéployer le client**. Échec de connexion → l'hôte déclenche automatiquement un restart ICE (nouvel offer) ; l'invité répond via le flux existant. Le message « Video connection lost » est effacé quand la connexion revient. Une pilule d'état ICE affiche Connecting/Connected/Direct (P2P)/Relay (TURN) dans la topbar.
 

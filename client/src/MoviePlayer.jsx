@@ -1,5 +1,9 @@
 import React, { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef } from "react";
 
+const DRIFT_SEEK_MS = 1000;        // reseek only when |drift| above this
+const DRIFT_HEARTBEAT_MS = 1500;
+const HEARTBEAT_MS = 8000;
+
 function parseYouTubeId(url) {
   const m = String(url || "").match(
     /(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch\?.*v=|embed\/|shorts\/|v\/))([\w-]{11})/
@@ -29,7 +33,7 @@ function fmt(sec) {
 }
 
 const MoviePlayer = forwardRef(function MoviePlayer(
-  { url, role, playback, onPlayback, onToggleFullscreen },
+  { url, playback, onPlayback, onToggleFullscreen, io, selfId, roomId },
   ref
 ) {
   const youtubeId = parseYouTubeId(url);
@@ -37,9 +41,10 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   const ytContainerRef = useRef(null);
   const ytPlayerRef = useRef(null);
   const videoRef = useRef(null);
-  const suppressRef = useRef(false);
-  const playbackRef = useRef(playback);
-  const roleRef = useRef(role);
+  const mirrorRef = useRef(false);     // while true, don't re-emit player events
+  const appliedInitialRef = useRef(false);
+  const initialRef = useRef(playback || null);
+  const playingRef = useRef(false);
   const volumeRef = useRef(100);
   const seekTimer = useRef(null);
   const clickTimer = useRef(null);
@@ -52,11 +57,8 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   const [volume, setVolume] = useState(100);
   const [muted, setMuted] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const playingRef = useRef(playing);
-  playingRef.current = playing;
 
-  useEffect(() => { playbackRef.current = playback; }, [playback]);
-  useEffect(() => { roleRef.current = role; }, [role]);
+  useEffect(() => { playingRef.current = playing; }, [playing]);
   useEffect(() => { volumeRef.current = volume; }, [volume]);
 
   const getCur = () =>
@@ -84,39 +86,81 @@ const MoviePlayer = forwardRef(function MoviePlayer(
     else { const v = videoRef.current; if (v) v.currentTime = t; }
   }, [youtubeId]);
 
-  function sync(nowPlaying, time) {
-    if (roleRef.current !== "host") return;
-    onPlayback(nowPlaying, Math.max(0, Number(time) || 0));
-  }
+  const emitAction = useCallback((type, time) => {
+    if (!io || !roomId) return;
+    io.emit("film:action", { roomId, type, currentTime: Number(time) || 0, timestamp: Date.now() });
+  }, [io, roomId]);
 
-  function applyCurrentState() {
-    if (roleRef.current !== "guest") return;
-    const state = playbackRef.current;
-    if (!state) return;
-    const time = Math.max(0, Number(state.time) || 0);
-
-    suppressRef.current = true;
-    if (youtubeId) {
-      const p = ytPlayerRef.current;
-      if (p) {
-        try { p.seekTo(time, true); } catch {}
-        try { if (state.playing) p.playVideo(); else p.pauseVideo(); } catch {}
+  /* Apply an action received from the peer. Never re-emit while doing so.
+     Only reseek when the drift is meaningful to avoid stutter on tiny gaps. */
+  const applyRemote = useCallback((type, time) => {
+    const t = Number(time);
+    if (!Number.isFinite(t) || t < 0) return;
+    mirrorRef.current = true;
+    try {
+      if (type === "seek") {
+        doSeek(t);
+      } else {
+        if (Math.abs(getCur() - t) > DRIFT_SEEK_MS / 1000) doSeek(t);
+        if (type === "play") doPlay();
+        else doPause();
       }
-    } else {
-      const v = videoRef.current;
-      if (v) {
-        v.currentTime = time;
-        if (state.playing) v.play().catch(() => {}); else v.pause();
-      }
+    } finally {
+      setTimeout(() => { mirrorRef.current = false; }, 1000);
     }
-    setTimeout(() => { suppressRef.current = false; }, 350);
-  }
+  }, [youtubeId, doPlay, doPause, doSeek]);
+
+  /* Periodic correction: re-converge on time, and on play state. */
+  const recalcSync = useCallback((remoteTime, remotePlaying) => {
+    if (!Number.isFinite(Number(remoteTime))) return;
+    mirrorRef.current = true;
+    try {
+      if (Math.abs(getCur() - Number(remoteTime)) > DRIFT_HEARTBEAT_MS / 1000) doSeek(Number(remoteTime));
+      if (remotePlaying && !playingRef.current) doPlay();
+      else if (!remotePlaying && playingRef.current) doPause();
+    } finally {
+      setTimeout(() => { mirrorRef.current = false; }, 1000);
+    }
+  }, [youtubeId, doPlay, doPause, doSeek]);
+
+  useEffect(() => {
+    if (!io) return;
+    const onAction = ({ type, currentTime, from }) => {
+      if (from && selfId && from === selfId) return;
+      applyRemote(type, currentTime);
+    };
+    const onSync = ({ currentTime, playing: remotePlaying, from }) => {
+      if (from && selfId && from === selfId) return;
+      recalcSync(currentTime, remotePlaying);
+    };
+    io.on("film:action", onAction);
+    io.on("film:sync", onSync);
+    return () => {
+      io.off("film:action", onAction);
+      io.off("film:sync", onSync);
+    };
+  }, [io, selfId, applyRemote, recalcSync]);
+
+  /* Startup position: for a late joiner, jump right into the stored state once. */
+  const applyInitial = useCallback(() => {
+    const st = initialRef.current;
+    if (!st || appliedInitialRef.current) return;
+    appliedInitialRef.current = true;
+    mirrorRef.current = true;
+    try {
+      const t = Math.max(0, Number(st.time) || 0);
+      if (t > 0) doSeek(t);
+      if (st.playing) doPlay();
+      else doPause();
+    } finally {
+      setTimeout(() => { mirrorRef.current = false; }, 1000);
+    }
+  }, [doPlay, doPause, doSeek]);
 
   useImperativeHandle(ref, () => ({
     play: doPlay,
     pause: doPause,
-    currentTime: getCur,
-    apply: applyCurrentState
+    currentTime: getCur
   }), [doPlay, doPause, youtubeId]);
 
   useEffect(() => {
@@ -146,19 +190,21 @@ const MoviePlayer = forwardRef(function MoviePlayer(
             try { player.setVolume(volumeRef.current); } catch {}
             setYtReady(true);
             setYtError(false);
-            applyCurrentState();
+            applyInitial();
           },
           onStateChange: (event) => {
             const st = event.data;
             if (st === window.YT.PlayerState.PLAYING) {
               setPlaying(true);
-              if (!suppressRef.current && roleRef.current === "host") sync(true, getCur());
+              onPlayback?.(true, getCur());
+              if (!mirrorRef.current) emitAction("play", getCur());
             } else if (st === window.YT.PlayerState.PAUSED) {
               setPlaying(false);
-              if (!suppressRef.current && roleRef.current === "host") sync(false, getCur());
+              onPlayback?.(false, getCur());
+              if (!mirrorRef.current) emitAction("pause", getCur());
             } else if (st === window.YT.PlayerState.ENDED) {
               setPlaying(false);
-              if (roleRef.current === "host") sync(false, getCur());
+              onPlayback?.(false, getCur());
             }
           },
           onError: () => {
@@ -187,6 +233,21 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   }, [youtubeId, ytReady]);
 
   useEffect(() => {
+    if (!io || !roomId || !youtubeId) return;
+    const iv = setInterval(() => {
+      if (!ytReady) return;
+      io.emit("film:sync", {
+        roomId,
+        currentTime: getCur(),
+        playing: playingRef.current,
+        timestamp: Date.now()
+      });
+    }, HEARTBEAT_MS);
+    return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [io, roomId, youtubeId, ytReady]);
+
+  useEffect(() => {
     const el = videoRef.current;
     if (el && !youtubeId) {
       el.volume = volume / 100;
@@ -194,32 +255,24 @@ const MoviePlayer = forwardRef(function MoviePlayer(
     }
   }, [youtubeId, volume, muted]);
 
-  useEffect(() => {
-    applyCurrentState();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playback]);
-
   function togglePlay() {
-    if (roleRef.current !== "host") return;
     if (playingRef.current) doPause();
     else doPlay();
   }
 
   function seekBy(delta) {
-    if (roleRef.current !== "host") return;
     const dur = getDur();
     const next = Math.min(Math.max(0, getCur() + delta), dur > 0 ? dur : Infinity);
     doSeek(next);
-    sync(playingRef.current, next);
+    emitAction("seek", next);
   }
 
   function onSeekInput(value) {
-    if (roleRef.current !== "host") return;
     const t = Number(value);
     setProg((p) => ({ ...p, cur: t }));
     doSeek(t);
+    emitAction("seek", t);
     clearTimeout(seekTimer.current);
-    seekTimer.current = setTimeout(() => sync(playingRef.current, t), 120);
   }
 
   function onVolumeChange(value) {
@@ -249,7 +302,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
       onToggleFullscreen?.();
       return;
     }
-    if (e.detail === 1 && roleRef.current === "host") {
+    if (e.detail === 1) {
       clearTimeout(clickTimer.current);
       clickTimer.current = setTimeout(() => togglePlay(), 220);
     }
@@ -262,7 +315,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   }
 
   const mediaReady = youtubeId ? ytReady : true;
-  const seekable = role === "host" && prog.dur > 0;
+  const seekable = prog.dur > 0;
 
   return (
     <>
@@ -284,10 +337,22 @@ const MoviePlayer = forwardRef(function MoviePlayer(
           onLoadedMetadata={(e) => {
             const v = e.target;
             if (v.videoWidth && v.videoHeight) setVideoRatio(v.videoWidth / v.videoHeight);
+            applyInitial();
           }}
-          onPlay={() => { setPlaying(true); if (roleRef.current === "host") sync(true, videoRef.current?.currentTime || 0); }}
-          onPause={() => { setPlaying(false); if (roleRef.current === "host") sync(false, videoRef.current?.currentTime || 0); }}
-          onEnded={() => { setPlaying(false); if (roleRef.current === "host") sync(false, videoRef.current?.currentTime || 0); }}
+          onPlay={() => {
+            setPlaying(true);
+            onPlayback?.(true, videoRef.current?.currentTime || 0);
+            if (!mirrorRef.current) emitAction("play", videoRef.current?.currentTime || 0);
+          }}
+          onPause={() => {
+            setPlaying(false);
+            onPlayback?.(false, videoRef.current?.currentTime || 0);
+            if (!mirrorRef.current) emitAction("pause", videoRef.current?.currentTime || 0);
+          }}
+          onEnded={() => {
+            setPlaying(false);
+            onPlayback?.(false, videoRef.current?.currentTime || 0);
+          }}
         />
       )}
 
