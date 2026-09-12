@@ -105,6 +105,76 @@ button { cursor: pointer; }
   background: #000; object-fit: contain;
 }
 
+/* ───────── ROOM — CALLFLIX custom controls (overlay above the movie) ─────────
+   Structure preserved from the working native player: the iframe stays a direct
+   child of .movie (no clipped/absolute wrapper) and the CALLFLIX UI floats as a
+   scene-level overlay, exactly like the topbar / control-bar. */
+.cf-movie { cursor: pointer; }
+.cf-movie iframe { position: absolute; top: 0; left: 0; width: 100% !important; height: 100% !important; border: 0; display: block; pointer-events: none; }
+.cf-controls {
+  position: absolute; inset: 0; z-index: 6;
+  pointer-events: none;
+  transition: opacity .35s;
+}
+.cf-play-big {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1;
+  width: 72px; height: 72px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(229,9,20,.9); color: #fff; border: none;
+  font-size: 26px; cursor: pointer; padding: 0 0 0 6px;
+  box-shadow: 0 10px 34px rgba(229,9,20,.5);
+  transition: transform .18s cubic-bezier(.25,.9,.32,1.2), background .2s;
+  pointer-events: auto;
+}
+.cf-play-big:hover { transform: translate(-50%, -50%) scale(1.1); background: #e50914; }
+.cf-error {
+  position: absolute; inset: 0; z-index: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; text-align: center; padding: 24px; color: #fff;
+  background: radial-gradient(circle at 50% 40%, rgba(229,9,20,.18), rgba(0,0,0,.88) 70%);
+  pointer-events: auto;
+}
+.cf-error-icon { font-size: 44px; }
+.cf-error p { margin: 0; font-size: 16px; font-weight: 700; }
+.cf-error small { color: #b9b9c2; max-width: 320px; }
+.cf-player-bar {
+  position: absolute; left: 14px; right: 14px; bottom: 12px; z-index: 2;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 14px 8px;
+  background: linear-gradient(0deg, rgba(0,0,0,.86) 0%, rgba(0,0,0,.55) 60%, transparent 100%);
+  border-radius: 12px;
+  pointer-events: auto;
+}
+.cf-bar-row { display: flex; align-items: center; gap: 8px; }
+.cf-btn {
+  background: transparent; border: none; color: #fff;
+  font-size: 15px; line-height: 1; cursor: pointer; padding: 7px 6px;
+  border-radius: 8px; transition: background .18s, transform .12s;
+}
+.cf-btn:hover { background: rgba(255,255,255,.14); }
+.cf-btn:active { transform: scale(.93); }
+.cf-step { font-size: 12px; font-weight: 600; padding: 6px 8px; border: 1px solid rgba(255,255,255,.18); }
+.cf-time { color: #e8e8ee; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cf-spacer { flex: 1; }
+.cf-range {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px; border-radius: 999px;
+  background: rgba(255,255,255,.28); outline: none; cursor: pointer;
+}
+.cf-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 13px; height: 13px; border-radius: 50%;
+  background: #e50914; border: 2px solid #fff; box-shadow: 0 0 6px rgba(0,0,0,.5);
+}
+.cf-range::-moz-range-thumb {
+  width: 11px; height: 11px; border-radius: 50%;
+  background: #e50914; border: 2px solid #fff;
+}
+.cf-range:disabled { cursor: default; opacity: .55; }
+.cf-volume { width: 90px; flex-shrink: 0; }
+
+.chrome-hidden .cf-controls { opacity: 0; pointer-events: none; }
+
 /* ───────── ROOM — floating cameras ───────── */
 .cameras {
   position: absolute; inset: 0; z-index: 4; pointer-events: none;
@@ -168,9 +238,9 @@ button { cursor: pointer; }
 .scene-topbar .link-input { max-width: 380px; margin: 8px auto 0; }
 .scene-topbar .meta-actions { margin-top: 8px; }
 
-/* ───────── ROOM — control-bar (bottom pill) ───────── */
+/* ───────── ROOM — control-bar (bottom pill, floats above the CALLFLIX player bar) ───────── */
 .control-bar {
-  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 5;
+  position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%); z-index: 5;
   display: flex; align-items: center; gap: 6px;
   padding: 8px 12px;
   background: rgba(10,10,14,.72);
@@ -209,7 +279,11 @@ button { cursor: pointer; }
 }
 .movie-scene:fullscreen .control-bar,
 .movie-scene:-webkit-full-screen .control-bar {
-  bottom: 22px;
+  bottom: 110px;
+}
+.movie-scene:fullscreen .cf-player-bar,
+.movie-scene:-webkit-full-screen .cf-player-bar {
+  left: 20px; right: 20px; bottom: 16px;
 }
 
 /* ───────── ROOM — sidebar ───────── */
@@ -260,9 +334,12 @@ button { cursor: pointer; }
   .ice-pill { display: none; }
   .cam-chip { width: clamp(86px, 26vw, 130px); }
   .cam-name { font-size: 10px; padding: 2px 6px; }
-  .control-bar { gap: 4px; padding: 6px 9px; }
+  .control-bar { gap: 4px; padding: 6px 9px; bottom: 88px; }
   .control-bar button { padding: 6px 8px; font-size: 12px; }
   .bar-sep { display: none; }
+  .cf-volume { display: none; }
+  .cf-step { padding: 5px 7px; font-size: 11px; }
+  .cf-play-big { width: 58px; height: 58px; font-size: 20px; }
   .scene-topbar { padding: 10px 12px 22px; }
   .scene-title { font-size: 14px; }
   .scene-topbar .meta-actions .compact { padding: 7px 10px; font-size: 12px; }

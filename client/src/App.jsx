@@ -400,6 +400,7 @@ function App() {
     clearTimeout(chromeTimer.current);
     const focused = document.activeElement && document.activeElement.tagName === "INPUT";
     if (focused || editingMovie) return;
+    if (playback && !playback.playing) return;
     chromeTimer.current = setTimeout(() => setChromeVisible(false), 2600);
   }
 
@@ -559,6 +560,7 @@ function App() {
                 role={role}
                 playback={playback}
                 onPlayback={handlePlayerPlayback}
+                onToggleFullscreen={toggleFullscreen}
               />
             </div>
 
