@@ -400,6 +400,7 @@ function App() {
     clearTimeout(chromeTimer.current);
     const focused = document.activeElement && document.activeElement.tagName === "INPUT";
     if (focused || editingMovie) return;
+    if (playback && !playback.playing) return;
     chromeTimer.current = setTimeout(() => setChromeVisible(false), 2600);
   }
 
@@ -559,6 +560,7 @@ function App() {
                 role={role}
                 playback={playback}
                 onPlayback={handlePlayerPlayback}
+                onToggleFullscreen={toggleFullscreen}
               />
             </div>
 
@@ -625,7 +627,6 @@ function App() {
               <div className="reactions">
                 {reactions.map((r) => <button key={r} onClick={() => sendReaction(r)} title={`Send ${r}`}>{r}</button>)}
               </div>
-              <button onClick={toggleFullscreen} title="Fullscreen">{isFullscreen ? "⤢" : "⛶"}</button>
             </div>
 
             {floatingReaction && <div className="reaction-float" key={floatingReaction.id}>{floatingReaction.reaction}</div>}
