@@ -207,6 +207,11 @@ const MoviePlayer = forwardRef(function MoviePlayer(
     }
   }, [youtubeId, volume, muted]);
 
+  useEffect(() => {
+    applyCurrentState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playback]);
+
   function togglePlay() {
     if (roleRef.current !== "host") return;
     if (playingRef.current) doPause();
