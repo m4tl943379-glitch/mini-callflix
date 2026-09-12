@@ -130,7 +130,6 @@ const MoviePlayer = forwardRef(function MoviePlayer(
         videoId: youtubeId,
         width: "100%",
         height: "100%",
-        host: "https://www.youtube-nocookie.com",
         playerVars: {
           controls: 0,
           rel: 0,
