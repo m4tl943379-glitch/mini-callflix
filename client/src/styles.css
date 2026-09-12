@@ -61,6 +61,15 @@ button { cursor: pointer; }
 }
 .topbar { display: flex; align-items: center; gap: 12px; flex-shrink: 0; z-index: 5; }
 .topbar-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.ice-pill {
+  display: flex; align-items: center; gap: 7px;
+  color: #a7a7ad; background: #111114; border: 1px solid #25252a;
+  border-radius: 999px; padding: 7px 12px; font-size: 11px; white-space: nowrap;
+}
+.ice-dot { width: 8px; height: 8px; border-radius: 50%; background: #777; }
+.ice-dot.waiting { background: #f5b301; box-shadow: 0 0 8px #f5b301; animation: icePulse 1.4s ease-in-out infinite; }
+.ice-dot.good { background: #46d369; box-shadow: 0 0 8px #46d369; }
+@keyframes icePulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
 .room-pill { color: #8d8d95; background: #111114; border: 1px solid #25252a; border-radius: 999px; padding: 8px 13px; font-size: 12px; }
 .room-pill strong { color: #eee; }
 .chat-toggle {
@@ -248,6 +257,7 @@ button { cursor: pointer; }
   .room-page { padding: 8px; gap: 8px; }
   .topbar { gap: 6px; }
   .room-pill { display: none; }
+  .ice-pill { display: none; }
   .cam-chip { width: clamp(86px, 26vw, 130px); }
   .cam-name { font-size: 10px; padding: 2px 6px; }
   .control-bar { gap: 4px; padding: 6px 9px; }

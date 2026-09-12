@@ -79,6 +79,35 @@ function publicState(room) {
 
 app.get("/health", (_req, res) => res.json({ ok: true, rooms: rooms.size }));
 
+function buildIceConfig() {
+  const stuns = (process.env.STUN_URLS || "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302,stun:stun.cloudflare.com:3478,stun:openrelay.metered.ca:80")
+    .split(",").map((s) => s.trim()).filter(Boolean);
+  const iceServers = [{ urls: stuns }];
+
+  const turnUrls = (process.env.TURN_URLS || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (turnUrls.length) {
+    iceServers.push({
+      urls: turnUrls,
+      username: process.env.TURN_USERNAME || "",
+      credential: process.env.TURN_CREDENTIAL || ""
+    });
+  } else {
+    iceServers.push(
+      {
+        urls: ["turn:openrelay.metered.ca:80?transport=udp", "turn:openrelay.metered.ca:80?transport=tcp"],
+        username: "openrelayproject",
+        credential: "openrelayproject"
+      },
+      { urls: "turns:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }
+    );
+  }
+  return iceServers;
+}
+
+app.get("/api/ice-config", (_req, res) => {
+  res.json({ iceServers: buildIceConfig() });
+});
+
 io.on("connection", (socket) => {
   socket.on("room:create", ({ name, movieUrl }, ack) => {
     const cleanName = String(name || "Host").trim().slice(0, 30) || "Host";

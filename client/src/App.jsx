@@ -9,9 +9,7 @@ const socket = io(SERVER_URL, { autoConnect: true });
 const ICE_SERVERS = [
   { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun.cloudflare.com:3478", "stun:openrelay.metered.ca:80"] },
   { urls: ["turn:openrelay.metered.ca:80?transport=udp", "turn:openrelay.metered.ca:80?transport=tcp"], username: "openrelayproject", credential: "openrelayproject" },
-  { urls: "turns:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-  { urls: ["turn:freeturn.net:3478?transport=udp", "turn:freeturn.net:3478?transport=tcp"], username: "free", credential: "free" },
-  { urls: "turns:freeturn.tel:5349", username: "free", credential: "free" }
+  { urls: "turns:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }
 ];
 const CUSTOM_TURN_URLS = (import.meta.env.VITE_TURN_URLS || "").split(",").filter(Boolean);
 if (CUSTOM_TURN_URLS.length) {
@@ -20,6 +18,26 @@ if (CUSTOM_TURN_URLS.length) {
     username: import.meta.env.VITE_TURN_USERNAME || "",
     credential: import.meta.env.VITE_TURN_CREDENTIAL || ""
   });
+}
+
+let fetchedIceServers = null;
+async function getIceServers() {
+  if (fetchedIceServers) return fetchedIceServers;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2500);
+    const res = await fetch(`${SERVER_URL}/api/ice-config`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data?.iceServers) && data.iceServers.length) {
+        fetchedIceServers = data.iceServers;
+        return fetchedIceServers;
+      }
+    }
+  } catch {}
+  fetchedIceServers = ICE_SERVERS;
+  return fetchedIceServers;
 }
 
 const reactions = ["❤️", "😂", "😱", "🔥"];
@@ -45,6 +63,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(true);
+  const [iceInfo, setIceInfo] = useState("");
 
   const localVideo = useRef(null);
   const remoteVideo = useRef(null);
@@ -126,6 +145,7 @@ function App() {
       setNotice(`${name} has left the room.`);
       if (remoteVideo.current) remoteVideo.current.srcObject = null;
       remoteStreamRef.current = null;
+      setIceInfo("");
       if (peer.current) {
         peer.current.close();
         peer.current = null;
@@ -142,6 +162,7 @@ function App() {
       localStream.current?.getTracks().forEach((t) => t.stop());
       localStream.current = null;
       remoteStreamRef.current = null;
+      setIceInfo("");
       peer.current?.close();
       peer.current = null;
       clearTimeout(reconnectTimer.current);
@@ -213,8 +234,10 @@ function App() {
   async function startPeer(isOfferer) {
     if (peer.current) return;
     const stream = await getLocalMedia();
+    const iceServers = await getIceServers();
+    setIceInfo(isOfferer ? "Waiting for your friend..." : "Connecting...");
     const pc = new RTCPeerConnection({
-      iceServers: ICE_SERVERS,
+      iceServers,
       iceCandidatePoolSize: 4
     });
     peer.current = pc;
@@ -230,19 +253,24 @@ function App() {
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
       if (s === "connected") {
+        setIceInfo("Connected");
+        setTimeout(() => refreshIceInfo(pc), 500);
         if (connectionLost.current) {
           connectionLost.current = false;
           setNotice("Video reconnected.");
         }
         return;
       }
+      if (s === "connecting") setIceInfo("Connecting...");
       if (s === "failed" || s === "disconnected") {
+        setIceInfo("Retrying...");
         connectionLost.current = true;
         setNotice("Video connection lost. Trying to reconnect...");
         if (role !== "host") return;
         clearTimeout(reconnectTimer.current);
         reconnectTimer.current = setTimeout(tryRenegotiate, 1200);
       }
+      if (s === "closed") setIceInfo("");
     };
 
     if (isOfferer) {
@@ -351,6 +379,7 @@ function App() {
     socket.emit("room:leave");
     clearTimeout(reconnectTimer.current);
     connectionLost.current = false;
+    setIceInfo("");
     localStream.current?.getTracks().forEach((t) => t.stop());
     localStream.current = null;
     remoteStreamRef.current = null;
@@ -411,6 +440,25 @@ function App() {
       await pc.setLocalDescription(offer);
       socket.emit("webrtc:offer", { roomId, offer });
     } catch {}
+  }
+
+  async function refreshIceInfo(pc) {
+    try {
+      const stats = await pc.getStats();
+      let pair = null;
+      stats.forEach((r) => {
+        if (r.type === "candidate-pair" && r.state === "succeeded" && !pair) pair = r;
+      });
+      if (pair) {
+        const remote = stats.get(pair.remoteCandidateId);
+        const type = remote?.candidateType || remote?.type;
+        setIceInfo(type === "relay" ? "Relay (TURN)" : "Direct (P2P)");
+      } else {
+        setIceInfo("Connected");
+      }
+    } catch {
+      setIceInfo("Connected");
+    }
   }
 
   function toggleFullscreen() {
@@ -484,6 +532,12 @@ function App() {
         <div className="brand small">CALL<span>FLIX</span></div>
         <div className="room-pill">ROOM <strong>{roomId}</strong></div>
         <div className="topbar-actions">
+          {iceInfo && (
+            <div className="ice-pill" title={`Connection: ${iceInfo}`}>
+              <span className={`ice-dot ${/Retrying|Connecting|Waiting/.test(iceInfo) ? "waiting" : "good"}`} />
+              {iceInfo}
+            </div>
+          )}
           <button
             className={`chat-toggle ${sidebarOpen ? "active" : ""}`}
             onClick={() => setSidebarOpen((o) => !o)}
