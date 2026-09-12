@@ -7,4 +7,4 @@ dist/
 .env.*.local
 .vscode/
 .idea/
-public/movie/movie.mp4
+public/movie/movie.mp4auth.pid
