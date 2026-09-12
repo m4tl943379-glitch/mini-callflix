@@ -19,4 +19,6 @@ jobs:
         run: npm ci
 
       - name: Deploy to Vercel (production)
-        run: npx vercel --prod --yes --token "${{ secrets.VERCEL_TOKEN }}" --build-env VITE_SERVER_URL=https://mini-callflix-signal.onrender.com
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx vercel@59.16.0 --prod --yes --build-env VITE_SERVER_URL=https://mini-callflix-signal.onrender.com

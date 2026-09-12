@@ -52,7 +52,7 @@ Règles serveur : max 2 participants par room ; les URL de film n'acceptent que 
 
 ## Déploiement
 
-- Frontend → **Vercel** : import repo, variable build-time `VITE_SERVER_URL` = URL Render, build `npm run build`, output `dist` (câblé par `vercel.json`).
+- Frontend → **Vercel** : import repo, variable build-time `VITE_SERVER_URL` = URL Render, build `npm run build`, output `dist` (câblé par `vercel.json`). Le workflow CI passe `VERCEL_TOKEN` via `env:` et épingler `vercel@59.16.0` (les CLI vercel ≥59 refusent les tokens `vca_` passés par `--token`) ; sinon le step « Deploy to Vercel » échoue sans erreur visible.
 - Serveur → **Render** : Blueprint `render.yaml` (npm install + npm start). WebSockets OK. Free tier : le service s'endort après ~15 min d'inactivité.
 - Vérifier `CLIENT_ORIGIN` sur Render = URL Vercel exacte, sinon CORS bloque le frontend.
 
