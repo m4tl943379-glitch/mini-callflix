@@ -1,3 +1,4 @@
+/* ───────── base ───────── */
 :root {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #f5f5f5;
@@ -8,97 +9,254 @@
 body { margin: 0; min-width: 320px; background: #08080a; }
 button, input { font: inherit; }
 button { cursor: pointer; }
+
+/* ───────── landing / setup (unchanged) ───────── */
 .landing { min-height: 100vh; display: grid; place-items: center; padding: 24px; position: relative; overflow: hidden; }
-.ambient { position: absolute; inset: 0; background: radial-gradient(circle at 50% 35%, rgba(180,20,35,.22), transparent 38%), radial-gradient(circle at 80% 90%, rgba(120,20,30,.12), transparent 30%); pointer-events: none; }
-.hero { max-width: 900px; text-align: center; position: relative; z-index: 1; }
-.brand { font-weight: 900; letter-spacing: -.06em; font-size: 54px; }
+.ambient  { position: absolute; inset: 0; background: radial-gradient(circle at 50% 35%, rgba(180,20,35,.22), transparent 38%), radial-gradient(circle at 80% 90%, rgba(120,20,30,.12), transparent 30%); pointer-events: none; }
+.hero     { max-width: 900px; text-align: center; position: relative; z-index: 1; }
+.brand    { font-weight: 900; letter-spacing: -.06em; font-size: 54px; }
 .brand span { color: #e50914; }
 .brand.small { font-size: 27px; }
-.eyebrow { font-size: 11px; letter-spacing: .18em; color: #a7a7ad; font-weight: 800; }
-.hero h1 { font-size: clamp(46px, 8vw, 92px); line-height: .94; letter-spacing: -.065em; margin: 28px 0 24px; }
+.eyebrow  { font-size: 11px; letter-spacing: .18em; color: #a7a7ad; font-weight: 800; }
+.hero h1  { font-size: clamp(46px, 8vw, 92px); line-height: .94; letter-spacing: -.065em; margin: 28px 0 24px; }
 .hero h1 em { color: #e50914; font-style: normal; }
 .subtitle { color: #aaaab1; max-width: 540px; margin: auto; font-size: 18px; line-height: 1.6; }
-.actions { display: flex; gap: 12px; justify-content: center; margin-top: 34px; }
-.primary, .secondary, .controls button, .invite-box button, .chat-form button {
+.actions  { display: flex; gap: 12px; justify-content: center; margin-top: 34px; }
+
+/* shared button/input tokens */
+.primary,
+.secondary,
+.invite-box button,
+.chat-form button {
   border: 0; border-radius: 13px; padding: 13px 20px; color: white; transition: .2s ease;
 }
-.primary { background: #e50914; box-shadow: 0 12px 35px rgba(229,9,20,.22); }
+.primary   { background: #e50914; box-shadow: 0 12px 35px rgba(229,9,20,.22); }
 .primary:hover { transform: translateY(-2px); background: #f3131e; }
 .secondary { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.1); }
 .secondary:hover { background: rgba(255,255,255,.12); }
+
 .card { width: min(440px, 100%); background: rgba(20,20,24,.88); border: 1px solid rgba(255,255,255,.1); border-radius: 24px; padding: 32px; backdrop-filter: blur(20px); position: relative; z-index: 1; }
 .card h2 { font-size: 34px; margin: 22px 0 8px; letter-spacing: -.04em; }
-.card p { color: #9999a1; margin-bottom: 26px; line-height: 1.5; }
-.card label { display:block; margin: 14px 0 7px; color: #c9c9ce; font-size: 13px; }
-.card input { width:100%; padding: 14px 15px; border-radius: 12px; border:1px solid #303037; background:#0e0e11; color:white; outline:none; }
-.card input:focus { border-color:#e50914; }
-.wide { width:100%; margin-top:20px; }
-.text-button { display:block; margin:16px auto 0; background:none; color:#aaa; border:0; }
-.error { margin-top: 14px; color:#ff8d94; font-size:13px; }
-.room-page { min-height:100vh; padding:18px; background: #08080a; }
-.topbar { display:flex; align-items:center; gap:18px; margin-bottom:18px; }
-.room-pill { margin-left:auto; color:#8d8d95; background:#111114; border:1px solid #25252a; border-radius:999px; padding:8px 13px; font-size:12px; }
-.room-pill strong { color:#eee; }
-.leave { background:transparent; border:1px solid #2b2b31; color:#aaa; padding:9px 13px; border-radius:10px; }
-.workspace { display:grid; grid-template-columns:minmax(0, 1fr) 340px; gap:18px; max-width:1500px; margin:auto; }
-.watch-area { min-width:0; }
-.movie-card { background:#101014; border:1px solid #222228; border-radius:18px; overflow:hidden; }
-.movie { display:block; width:100%; aspect-ratio:16/9; background:#050505; object-fit:contain; }
-.movie-meta { display:flex; justify-content:space-between; align-items:center; padding:14px 18px; }
-.movie-meta h2 { margin:4px 0 0; font-size:20px; }
-.compact { padding:9px 14px; border-radius:10px; }
-.meta-actions { display:flex; gap:8px; align-items:center; }
-.ghost { background:transparent; border:1px solid #2b2b31; color:#aaa; padding:9px 14px; border-radius:10px; }
-.ghost:hover { background:rgba(255,255,255,.08); }
-.link-input { width:100%; margin-top:10px; padding:10px 12px; border-radius:10px; border:1px solid #303037; background:#0e0e11; color:white; outline:none; }
-.link-input:focus { border-color:#e50914; }
-.camera-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px; }
-.camera-card { position:relative; aspect-ratio:16/9; background:#15151a; border:1px solid #29292f; border-radius:14px; overflow:hidden; }
-.camera-card video { width:100%; height:100%; object-fit:cover; }
-.camera-card span { position:absolute; left:9px; bottom:9px; padding:6px 9px; border-radius:8px; background:rgba(0,0,0,.58); font-size:12px; }
-.camera-card .avatar { height:100%; display:grid; place-items:center; font-weight:900; color:#777; }
-.controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
-.controls button { background:#15151a; border:1px solid #29292f; padding:9px 12px; font-size:12px; }
-.reactions { display:flex; gap:5px; margin-left:auto; }
-.reactions button { font-size:17px; padding:7px 10px; }
-.sidebar { background:#101014; border:1px solid #222228; border-radius:18px; padding:15px; display:flex; flex-direction:column; min-height:0; }
-.invite-box { padding:14px; background:#17171c; border-radius:13px; }
-.invite-box strong { display:block; margin-top:5px; }
-.invite-box button { margin-top:12px; width:100%; background:#25252b; font-size:12px; }
-.invite-box small { display:block; color:#8f8f97; margin-top:9px; }
-.status { color:#aaa; padding:15px 3px; font-size:13px; }
-.dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#777; margin-right:7px; }
-.dot.online { background:#46d369; box-shadow:0 0 10px #46d369; }
-.chat { display:flex; flex-direction:column; min-height:0; flex:1; }
-.chat-title { font-weight:800; padding:10px 3px; border-bottom:1px solid #25252a; }
-.messages { flex:1; overflow:auto; padding:12px 2px; min-height:180px; }
-.empty { color:#777; font-size:13px; text-align:center; padding:30px 10px; }
-.message { margin:9px 0; }
-.message small { color:#777; font-size:10px; }
-.message p { display:inline-block; margin:4px 0 0; padding:8px 10px; background:#1b1b20; border-radius:10px; max-width:90%; font-size:13px; }
-.message.mine { text-align:right; }
-.message.mine p { background:#3a1216; }
-.chat-form { display:flex; gap:7px; }
-.chat-form input { min-width:0; flex:1; background:#0b0b0e; color:white; border:1px solid #29292f; border-radius:10px; padding:10px; }
-.chat-form button { padding:10px 12px; background:#e50914; }
-.reaction-float { position:fixed; right:35%; bottom:25%; font-size:60px; animation: floatUp 1.2s ease forwards; pointer-events:none; z-index:20; }
-@keyframes floatUp { from { opacity:0; transform:translateY(20px) scale(.7); } 20% { opacity:1; } to { opacity:0; transform:translateY(-100px) scale(1.2); } }
+.card p  { color: #9999a1; margin-bottom: 26px; line-height: 1.5; }
+.card label { display: block; margin: 14px 0 7px; color: #c9c9ce; font-size: 13px; }
+.card input { width: 100%; padding: 14px 15px; border-radius: 12px; border: 1px solid #303037; background: #0e0e11; color: white; outline: none; }
+.card input:focus { border-color: #e50914; }
+.wide  { width: 100%; margin-top: 20px; }
+.text-button { display: block; margin: 16px auto 0; background: none; color: #aaa; border: 0; }
+.error { margin-top: 14px; color: #ff8d94; font-size: 13px; }
 
+/* shared ghost / compact / link-input tokens (used in scene-topbar) */
+.compact   { padding: 9px 14px; border-radius: 10px; }
+.meta-actions { display: flex; gap: 8px; align-items: center; }
+.ghost     { background: transparent; border: 1px solid #2b2b31; color: #aaa; padding: 9px 14px; border-radius: 10px; }
+.ghost:hover { background: rgba(255,255,255,.08); }
+.link-input { width: 100%; margin-top: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid #303037; background: #0e0e11; color: white; outline: none; }
+.link-input:focus { border-color: #e50914; }
+
+/* ───────── ROOM — topbar ───────── */
+.room-page {
+  height: 100vh; display: flex; flex-direction: column;
+  padding: 14px; gap: 10px; overflow: hidden;
+  background: #08080a;
+}
+.topbar { display: flex; align-items: center; gap: 12px; flex-shrink: 0; z-index: 5; }
+.topbar-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.room-pill { color: #8d8d95; background: #111114; border: 1px solid #25252a; border-radius: 999px; padding: 8px 13px; font-size: 12px; }
+.room-pill strong { color: #eee; }
+.chat-toggle {
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.1);
+  color: #aaa; padding: 8px 14px; border-radius: 10px; transition: .2s;
+}
+.chat-toggle:hover { background: rgba(255,255,255,.12); }
+.chat-toggle.active { background: rgba(229,9,20,.18); border-color: rgba(229,9,20,.4); color: #e50914; }
+.chat-toggle span { display: none; }
+.leave {
+  background: transparent; border: 1px solid #2b2b31; color: #aaa;
+  padding: 8px 13px; border-radius: 10px; font-size: 13px;
+}
+.leave:hover { background: rgba(255,255,255,.06); }
+
+/* ───────── ROOM — workspace ───────── */
+.workspace { flex: 1; display: flex; gap: 14px; min-height: 0; }
+.watch-stage { flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 0; }
+
+/* ───────── ROOM — movie scene (the hero) ───────── */
+.movie-scene {
+  position: relative; width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 14px; border: 1px solid #1e1e24; background: #000; overflow: hidden;
+}
+.movie-surface {
+  position: relative; width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+}
+.movie {
+  display: block; width: auto; height: auto;
+  max-width: 100%; max-height: 100%; aspect-ratio: 16 / 9;
+  background: #000; object-fit: contain;
+}
+
+/* ───────── ROOM — floating cameras ───────── */
+.cameras {
+  position: absolute; inset: 0; z-index: 4; pointer-events: none;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 14px; gap: 10px;
+}
+.cam-chip {
+  position: relative; width: clamp(120px, 18vw, 210px); aspect-ratio: 16 / 9;
+  border-radius: 12px; overflow: hidden;
+  background: rgba(10,10,14,.55);
+  border: 1px solid rgba(255,255,255,.16);
+  box-shadow: 0 8px 28px rgba(0,0,0,.55);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  pointer-events: auto;
+  transition: transform .3s cubic-bezier(.25,.9,.32,1.15), box-shadow .3s, opacity .3s;
+  opacity: .92;
+}
+.cam-chip:hover {
+  transform: scale(1.14);
+  box-shadow: 0 14px 40px rgba(0,0,0,.7);
+  opacity: 1; z-index: 6;
+}
+.cam-chip.self   { transform-origin: top left; }
+.cam-chip.remote { transform-origin: top right; }
+.cam-chip video { width: 100%; height: 100%; object-fit: cover; }
+.cam-name {
+  position: absolute; left: 8px; bottom: 8px;
+  font-size: 11px; color: #fff; line-height: 1;
+  background: rgba(0,0,0,.55); padding: 3px 8px; border-radius: 999px;
+  backdrop-filter: blur(6px); pointer-events: none;
+}
+.cam-actions {
+  position: absolute; top: 6px; right: 6px;
+  display: flex; gap: 5px;
+  opacity: 0; transition: opacity .25s;
+}
+.cam-chip:hover .cam-actions { opacity: 1; }
+.cam-actions button {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.55);
+  color: #fff; cursor: pointer; font-size: 12px; padding: 0;
+  display: grid; place-items: center;
+}
+.cam-actions button:hover { background: rgba(255,255,255,.15); }
+.cam-placeholder {
+  width: 100%; height: 100%; display: grid; place-items: center;
+  font-weight: 900; color: #666; background: #0a0a0d;
+}
+
+/* ───────── ROOM — scene-topbar (title / link / start) ───────── */
+.scene-topbar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 16px 16px 28px; text-align: center;
+  background: linear-gradient(180deg, rgba(0,0,0,.68) 0%, transparent 100%);
+  pointer-events: none;
+}
+.scene-topbar > * { pointer-events: auto; }
+.scene-topbar .eyebrow { margin-bottom: 4px; }
+.scene-title { margin: 2px 0 0; font-size: 16px; color: #fff; }
+.scene-topbar .link-input { max-width: 380px; margin: 8px auto 0; }
+.scene-topbar .meta-actions { margin-top: 8px; }
+
+/* ───────── ROOM — control-bar (bottom pill) ───────── */
+.control-bar {
+  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 5;
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px;
+  background: rgba(10,10,14,.72);
+  border: 1px solid rgba(255,255,255,.12); border-radius: 999px;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  pointer-events: auto;
+  transition: opacity .35s, transform .35s;
+}
+.control-bar button {
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+  color: #fff; padding: 7px 10px; border-radius: 10px;
+  font-size: 14px; cursor: pointer; transition: background .2s;
+}
+.control-bar button:hover { background: rgba(255,255,255,.18); }
+.bar-sep { width: 1px; height: 22px; background: rgba(255,255,255,.15); margin: 0 2px; flex-shrink: 0; }
+.reactions { display: flex; gap: 4px; }
+.reactions button { font-size: 15px; padding: 6px 8px; border: 0; background: transparent; color: #fff; cursor: pointer; }
+.reactions button:hover { background: rgba(255,255,255,.1); border-radius: 8px; }
+
+/* chrome hidden (auto-hide on idle) */
+.chrome-hidden .scene-topbar { opacity: 0; transform: translateY(-4px); pointer-events: none; }
+.chrome-hidden .control-bar  { opacity: 0; transform: translate(-50%, 6px); pointer-events: none; }
+
+/* ───────── ROOM — fullscreen ───────── */
+.movie-scene:fullscreen,
+.movie-scene:-webkit-full-screen {
+  border-radius: 0; border: none;
+}
+.movie-scene:fullscreen .movie,
+.movie-scene:-webkit-full-screen .movie {
+  max-height: 100vh; max-width: 100vw;
+}
+.movie-scene:fullscreen .cam-chip,
+.movie-scene:-webkit-full-screen .cam-chip {
+  width: clamp(110px, 16vw, 200px);
+}
+.movie-scene:fullscreen .control-bar,
+.movie-scene:-webkit-full-screen .control-bar {
+  bottom: 22px;
+}
+
+/* ───────── ROOM — sidebar ───────── */
+.sidebar {
+  width: 340px; flex-shrink: 0;
+  background: #101014; border: 1px solid #222228; border-radius: 18px;
+  padding: 15px; display: flex; flex-direction: column; min-height: 0;
+}
+.invite-box { padding: 14px; background: #17171c; border-radius: 13px; }
+.invite-box strong { display: block; margin-top: 5px; }
+.invite-box button { margin-top: 12px; width: 100%; background: #25252b; font-size: 12px; }
+.invite-box small  { display: block; color: #8f8f97; margin-top: 9px; }
+.status { color: #aaa; padding: 15px 3px; font-size: 13px; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #777; margin-right: 7px; }
+.dot.online { background: #46d369; box-shadow: 0 0 10px #46d369; }
+.chat { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.chat-title { font-weight: 800; padding: 10px 3px; border-bottom: 1px solid #25252a; }
+.messages { flex: 1; overflow: auto; padding: 12px 2px; min-height: 180px; }
+.empty { color: #777; font-size: 13px; text-align: center; padding: 30px 10px; }
+.message { margin: 9px 0; }
+.message small { color: #777; font-size: 10px; }
+.message p { display: inline-block; margin: 4px 0 0; padding: 8px 10px; background: #1b1b20; border-radius: 10px; max-width: 90%; font-size: 13px; }
+.message.mine { text-align: right; }
+.message.mine p { background: #3a1216; }
+.chat-form { display: flex; gap: 7px; }
+.chat-form input { min-width: 0; flex: 1; background: #0b0b0e; color: white; border: 1px solid #29292f; border-radius: 10px; padding: 10px; }
+.chat-form button { padding: 10px 12px; background: #e50914; }
+
+/* ───────── reaction float ───────── */
+.reaction-float { position: fixed; right: 35%; bottom: 25%; font-size: 60px; animation: floatUp 1.2s ease forwards; pointer-events: none; z-index: 20; }
+@keyframes floatUp { from { opacity: 0; transform: translateY(20px) scale(.7); } 20% { opacity: 1; } to { opacity: 0; transform: translateY(-100px) scale(1.2); } }
+
+/* ───────── responsive ───────── */
+@media (min-width: 640px) {
+  .chat-toggle span { display: inline; }
+}
 @media (max-width: 900px) {
-  .workspace { grid-template-columns:1fr; }
-  .sidebar { min-height:360px; }
-  .room-pill { margin-left:auto; }
+  .room-page { height: auto; min-height: 100vh; overflow: auto; }
+  .workspace { flex-direction: column; }
+  .watch-stage { flex: none; min-height: 50vh; }
+  .sidebar { width: 100%; min-height: 340px; }
+  .cam-chip { width: clamp(100px, 22vw, 160px); }
 }
 @media (max-width: 600px) {
-  .room-page { padding:10px; }
-  .topbar { gap:8px; }
-  .room-pill { display:none; }
-  .camera-grid { gap:7px; }
-  .controls { gap:5px; }
-  .reactions { margin-left:0; width:100%; }
-  .reactions button { flex:1; }
-  .movie-meta { padding:11px; }
-  .hero h1 { font-size:46px; }
-  .actions { flex-direction:column; }
-  .actions button { width:100%; }
+  .room-page { padding: 8px; gap: 8px; }
+  .topbar { gap: 6px; }
+  .room-pill { display: none; }
+  .cam-chip { width: clamp(86px, 26vw, 130px); }
+  .cam-name { font-size: 10px; padding: 2px 6px; }
+  .control-bar { gap: 4px; padding: 6px 9px; }
+  .control-bar button { padding: 6px 8px; font-size: 12px; }
+  .bar-sep { display: none; }
+  .scene-topbar { padding: 10px 12px 22px; }
+  .scene-title { font-size: 14px; }
+  .scene-topbar .meta-actions .compact { padding: 7px 10px; font-size: 12px; }
+  .hero h1 { font-size: 46px; }
+  .actions { flex-direction: column; }
+  .actions button { width: 100%; }
 }

@@ -31,6 +31,8 @@ Vérification syntaxe serveur : `node --check server/server.js`.
 | `PORT` | 3001 | Port du serveur (Render injecte le sien) |
 | `CLIENT_ORIGIN` | http://localhost:5173 | Origine CORS autorisée pour Socket.IO/Express |
 | `VITE_SERVER_URL` | http://localhost:3001 | URL du serveur Socket.IO **côté client** (à la construction) |
+| `VITE_TURN_URLS` | (vide) | Liste `,` de serveurs TURN supplémentaires (`turn:host:port?transport=tcp`) |
+| `VITE_TURN_USERNAME` / `VITE_TURN_CREDENTIAL` | (vides) | Identifiants TURN si le serveur requiert une auth |
 | `ROOM_IDLE_TTL_MS` | 1800000 (30 min) | TTL de nettoyage d'une room laissée avec 1 seul participant |
 
 ## Protocole Socket.IO (événements)
@@ -45,7 +47,7 @@ Règles serveur : max 2 participants par room ; seul l'hôte change `playback:st
 
 - MoviePlayer choisit automatiquement : lien YouTube → lecteur IFrame (hôte autoritaire, contrôles nativés ; invité sans contrôles), sinon `<video>` local. L'invité se recale sur `playback` au chargement et à chaque `playback:state`.
 - Rooms **en mémoire** : redémarrage du serveur = rooms effacées. Une room vide est supprimée immédiatement ; une room à 1 participant est supprimée après `ROOM_IDLE_TTL_MS`.
-- WebRTC : STUN public Google uniquement (pas de TURN → certains réseaux échouent).
+- WebRTC : 4 serveurs STUN publics (Google x2, Cloudflare, OpenRelay) + 2 serveurs TURN gratuits intégrés (OpenRelay public, freeTURN) comme fallback, en dur dans `App.jsx` (`ICE_SERVERS`). Surcharge possible via `VITE_TURN_*` (build-time). Échec de connexion → l'hôte déclenche automatiquement un restart ICE (nouvel offer) ; l'invité répond via le flux existant. Le message « Video connection lost » est effacé quand la connexion revient.
 
 ## Déploiement
 
@@ -55,4 +57,4 @@ Règles serveur : max 2 participants par room ; seul l'hôte change `playback:st
 
 ## Limites connues
 
-Pas d'auth, pas de persistance du chat, une seule vidéo à la fois, pas de TURN, synchro simple sans correction de dérive.
+Pas d'auth, pas de persistance du chat, une seule vidéo à la fois, synchro simple sans correction de dérive.

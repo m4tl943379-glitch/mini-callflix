@@ -36,6 +36,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
 
   const youtubeId = parseYouTubeId(url);
   const [ytReady, setYtReady] = useState(false);
+  const [videoRatio, setVideoRatio] = useState(16 / 9);
 
   function applyCurrentState() {
     if (roleRef.current !== "guest") return;
@@ -136,9 +137,14 @@ const MoviePlayer = forwardRef(function MoviePlayer(
     <video
       ref={videoRef}
       className="movie"
+      style={{ aspectRatio: videoRatio }}
       src={url}
       controls
       playsInline
+      onLoadedMetadata={(e) => {
+        const v = e.target;
+        if (v.videoWidth && v.videoHeight) setVideoRatio(v.videoWidth / v.videoHeight);
+      }}
       onClick={(_) => {}}
       onPlay={() => { if (role === "host") onPlayback(true, videoRef.current?.currentTime || 0); }}
       onPause={() => { if (role === "host") onPlayback(false, videoRef.current?.currentTime || 0); }}
