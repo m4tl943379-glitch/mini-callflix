@@ -145,6 +145,10 @@ const MoviePlayer = forwardRef(function MoviePlayer(
           onReady: () => {
             ytPlayerRef.current = player;
             try { player.setVolume(volumeRef.current); } catch {}
+            const rect = ytContainerRef.current?.getBoundingClientRect?.();
+            if (rect && rect.width > 0 && rect.height > 0) {
+              try { player.setSize(rect.width, rect.height); } catch {}
+            }
             setYtReady(true);
             setYtError(false);
             applyCurrentState();
