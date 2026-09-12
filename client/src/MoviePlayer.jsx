@@ -33,7 +33,7 @@ function fmt(sec) {
 }
 
 const MoviePlayer = forwardRef(function MoviePlayer(
-  { url, playback, onPlayback, onToggleFullscreen, io, selfId, roomId },
+  { url, playback, onPlayback, onToggleFullscreen, io, selfId, roomId, solo = false },
   ref
 ) {
   const youtubeId = parseYouTubeId(url);
@@ -46,6 +46,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   const initialRef = useRef(playback || null);
   const playingRef = useRef(false);
   const volumeRef = useRef(100);
+  const soloRef = useRef(solo);
   const seekTimer = useRef(null);
   const clickTimer = useRef(null);
 
@@ -60,6 +61,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
 
   useEffect(() => { playingRef.current = playing; }, [playing]);
   useEffect(() => { volumeRef.current = volume; }, [volume]);
+  useEffect(() => { soloRef.current = solo; }, [solo]);
 
   const getCur = () =>
     (youtubeId && ytPlayerRef.current)
@@ -87,7 +89,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   }, [youtubeId]);
 
   const emitAction = useCallback((type, time) => {
-    if (!io || !roomId) return;
+    if (!io || !roomId || soloRef.current) return;
     io.emit("film:action", { roomId, type, currentTime: Number(time) || 0, timestamp: Date.now() });
   }, [io, roomId]);
 
@@ -126,10 +128,12 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   useEffect(() => {
     if (!io) return;
     const onAction = ({ type, currentTime, from }) => {
+      if (soloRef.current) return;
       if (from && selfId && from === selfId) return;
       applyRemote(type, currentTime);
     };
     const onSync = ({ currentTime, playing: remotePlaying, from }) => {
+      if (soloRef.current) return;
       if (from && selfId && from === selfId) return;
       recalcSync(currentTime, remotePlaying);
     };
@@ -144,7 +148,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   /* Startup position: for a late joiner, jump right into the stored state once. */
   const applyInitial = useCallback(() => {
     const st = initialRef.current;
-    if (!st || appliedInitialRef.current) return;
+    if (!st || appliedInitialRef.current || soloRef.current) return;
     appliedInitialRef.current = true;
     mirrorRef.current = true;
     try {
@@ -233,7 +237,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   }, [youtubeId, ytReady]);
 
   useEffect(() => {
-    if (!io || !roomId || !youtubeId) return;
+    if (!io || !roomId || !youtubeId || solo) return;
     const iv = setInterval(() => {
       if (!ytReady) return;
       io.emit("film:sync", {
@@ -245,7 +249,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
     }, HEARTBEAT_MS);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [io, roomId, youtubeId, ytReady]);
+  }, [io, roomId, youtubeId, ytReady, solo]);
 
   useEffect(() => {
     const el = videoRef.current;

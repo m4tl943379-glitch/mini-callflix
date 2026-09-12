@@ -65,6 +65,12 @@ function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(true);
   const [iceInfo, setIceInfo] = useState("");
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [partnerLeftAlert, setPartnerLeftAlert] = useState(false);
+  const [soloMode, setSoloMode] = useState(false);
+  const hasLeftRef = useRef(false);
+  const partnerLeftHandledRef = useRef(false);
+  const isCleaningUpRef = useRef(false);
 
   const localVideo = useRef(null);
   const remoteVideo = useRef(null);
@@ -144,18 +150,22 @@ function App() {
       setTimeout(() => setFloatingReaction(null), 1200);
     };
 
-    const onLeft = ({ name, state }) => {
-      setRoomState(state);
-      setNotice(`${name} has left the room.`);
-      if (remoteVideo.current) remoteVideo.current.srcObject = null;
-      remoteStreamRef.current = null;
-      setIceInfo("");
+    const onLeft = ({ state }) => {
+      if (hasLeftRef.current || isCleaningUpRef.current) return;
+      if (partnerLeftHandledRef.current) return;
+      partnerLeftHandledRef.current = true;
+      setRoomState(state || null);
+      setNotice("");
       if (peer.current) {
         peer.current.close();
         peer.current = null;
       }
+      remoteStreamRef.current = null;
+      if (remoteVideo.current) remoteVideo.current.srcObject = null;
       clearTimeout(reconnectTimer.current);
       connectionLost.current = false;
+      setIceInfo("");
+      setPartnerLeftAlert(true);
     };
 
     const onMovieUrl = ({ movieUrl }) => {
@@ -371,23 +381,90 @@ function App() {
     setTimeout(() => setFloatingReaction(null), 1200);
   }
 
-  function leaveRoom() {
-    socket.emit("room:leave");
-    clearTimeout(reconnectTimer.current);
-    connectionLost.current = false;
-    setIceInfo("");
+function stopLocalMedia() {
     localStream.current?.getTracks().forEach((t) => t.stop());
     localStream.current = null;
+    if (localVideo.current) localVideo.current.srcObject = null;
+  }
+
+  function closePeerConnection() {
+    if (peer.current) {
+      peer.current.close();
+      peer.current = null;
+    }
     remoteStreamRef.current = null;
-    peer.current?.close();
-    peer.current = null;
-    setRoomId("");
-    setRoomState(null);
+    if (remoteVideo.current) remoteVideo.current.srcObject = null;
+    clearTimeout(reconnectTimer.current);
+    connectionLost.current = false;
+  }
+
+  function resetRoomUi() {
     setPlayback(null);
     setMessages([]);
     setLinkInput("");
     setEditingMovie(false);
+  }
+
+  function backToHome() {
+    socket.emit("room:leave");
+    playerRef.current?.pause();
+    stopLocalMedia();
+    closePeerConnection();
+    setIceInfo("");
+    setShowLeaveConfirm(false);
+    setPartnerLeftAlert(false);
+    setSoloMode(false);
+    resetRoomUi();
+    setRoomId("");
+    setRoomState(null);
     setView("home");
+    setNotice("");
+    window.history.replaceState({}, "", "/");
+  }
+
+  function performCleanExit() {
+    if (isCleaningUpRef.current) return;
+    isCleaningUpRef.current = true;
+    hasLeftRef.current = true;
+    socket.emit("room:leave");
+    playerRef.current?.pause();
+    stopLocalMedia();
+    closePeerConnection();
+    setIceInfo("");
+    setShowLeaveConfirm(false);
+    setPartnerLeftAlert(false);
+    resetRoomUi();
+    setRoomId("");
+    setRoomState(null);
+    setView("thanks");
+    setNotice("");
+    window.history.replaceState({}, "", "/");
+  }
+
+  function leaveRoom() {
+    if (isCleaningUpRef.current) return;
+    setShowLeaveConfirm(true);
+  }
+
+  function confirmLeaveRoom() {
+    if (isCleaningUpRef.current) return;
+    setShowLeaveConfirm(false);
+    performCleanExit();
+  }
+
+  function continueWatchingSolo() {
+    if (partnerLeftHandledRef.current || isCleaningUpRef.current) return;
+    partnerLeftHandledRef.current = true;
+    setPartnerLeftAlert(false);
+    setSoloMode(true);
+    socket.emit("room:leave");
+    stopLocalMedia();
+    closePeerConnection();
+    setIceInfo("");
+    setRoomId("");
+    setRoomState(null);
+    setPlayback(null);
+    setNotice("");
     window.history.replaceState({}, "", "/");
   }
 
@@ -523,13 +600,27 @@ function App() {
     );
   }
 
+  if (view === "thanks") {
+    return (
+      <main className="landing">
+        <div className="ambient" />
+        <section className="card thanks-card">
+          <div className="thanks-heart">❤️</div>
+          <h2>Thanks for watching</h2>
+          <p className="thanks-sub">Hope you enjoyed the movie!</p>
+          <button className="primary wide" onClick={backToHome}>Back to Home</button>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className={`room-page ${sidebarOpen ? "" : "chat-closed"}`}>
       <header className="topbar">
         <div className="brand small">CALL<span>FLIX</span></div>
-        <div className="room-pill">ROOM <strong>{roomId}</strong></div>
+        {!soloMode && <div className="room-pill">ROOM <strong>{roomId}</strong></div>}
         <div className="topbar-actions">
-          {iceInfo && (
+          {iceInfo && !soloMode && (
             <div className="ice-pill" title={`Connection: ${iceInfo}`}>
               <span className={`ice-dot ${/Retrying|Connecting|Waiting/.test(iceInfo) ? "waiting" : "good"}`} />
               {iceInfo}
@@ -542,7 +633,9 @@ function App() {
           >
             💬 <span>Chat</span>
           </button>
-          <button className="leave" onClick={leaveRoom}>Leave</button>
+          <button className="leave" onClick={soloMode ? backToHome : leaveRoom}>
+            {soloMode ? "Exit" : "Leave"}
+          </button>
         </div>
       </header>
 
@@ -559,10 +652,12 @@ function App() {
                 io={socket}
                 selfId={socketId}
                 roomId={roomId}
+                solo={soloMode}
               />
             </div>
 
-            <div className="cameras">
+            {!soloMode && (
+              <div className="cameras">
               <div className={`cam-chip self ${media.cameraEnabled ? "" : "cam-off"}`}>
                 {media.cameraEnabled ? (
                   <video ref={localVideo} autoPlay muted playsInline />
@@ -583,6 +678,7 @@ function App() {
                 </span>
               </div>
             </div>
+            )}
 
             <div className="scene-topbar">
               <span className="eyebrow">TONIGHT'S MOVIE</span>
@@ -619,9 +715,13 @@ function App() {
             </div>
 
             <div className="control-bar">
-              <button onClick={toggleCamera} title="Toggle camera">{media.cameraEnabled ? "🎥" : "🚫"}</button>
-              <button onClick={toggleMic} title="Toggle microphone">{media.micEnabled ? "🎤" : "🔇"}</button>
-              <span className="bar-sep" />
+              {!soloMode && (
+                <>
+                  <button onClick={toggleCamera} title="Toggle camera">{media.cameraEnabled ? "🎥" : "🚫"}</button>
+                  <button onClick={toggleMic} title="Toggle microphone">{media.micEnabled ? "🎤" : "🔇"}</button>
+                  <span className="bar-sep" />
+                </>
+              )}
               <div className="reactions">
                 {reactions.map((r) => <button key={r} onClick={() => sendReaction(r)} title={`Send ${r}`}>{r}</button>)}
               </div>
@@ -634,19 +734,23 @@ function App() {
 
         {sidebarOpen && (
           <aside className="sidebar">
-            <div className="invite-box">
-              <div>
-                <span className="eyebrow">PRIVATE ROOM</span>
-                <strong>{roomState?.count || 1}/2 participants</strong>
+            {!soloMode && (
+              <div className="invite-box">
+                <div>
+                  <span className="eyebrow">PRIVATE ROOM</span>
+                  <strong>{roomState?.count || 1}/2 participants</strong>
+                </div>
+                <button onClick={copyInvite}>Copy invite link</button>
+                {notice && <small>{notice}</small>}
               </div>
-              <button onClick={copyInvite}>Copy invite link</button>
-              {notice && <small>{notice}</small>}
-            </div>
+            )}
 
-            <div className="status">
-              <span className={`dot ${roomState?.count === 2 ? "online" : ""}`} />
-              {roomState?.count === 2 ? "Both connected" : "Waiting for your friend..."}
-            </div>
+            {!soloMode && (
+              <div className="status">
+                <span className={`dot ${roomState?.count === 2 ? "online" : ""}`} />
+                {roomState?.count === 2 ? "Both connected" : "Waiting for your friend..."}
+              </div>
+            )}
 
             <div className="chat">
               <div className="chat-title">Chat</div>
@@ -667,6 +771,31 @@ function App() {
           </aside>
         )}
       </div>
+
+      {showLeaveConfirm && (
+        <div className="cf-modal-backdrop" onClick={() => setShowLeaveConfirm(false)}>
+          <div className="cf-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Are you sure you want to leave the room?</h3>
+            <div className="cf-modal-actions">
+              <button className="ghost" onClick={() => setShowLeaveConfirm(false)}>Stay</button>
+              <button className="primary" onClick={confirmLeaveRoom}>Leave Room</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {partnerLeftAlert && (
+        <div className="cf-modal-backdrop">
+          <div className="cf-modal">
+            <h3>Your partner has left the room.</h3>
+            <p className="cf-modal-sub">Do you want to continue watching the movie alone?</p>
+            <div className="cf-modal-actions">
+              <button className="primary" onClick={continueWatchingSolo}>Continue Watching</button>
+              <button className="ghost" onClick={confirmLeaveRoom}>Leave Room</button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

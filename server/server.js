@@ -255,7 +255,7 @@ function handleDisconnect(socket, explicitLeave) {
   socket.data.roomId = null;
   socket.data.role = null;
 
-  io.to(roomId).emit("room:participant-left", {
+  socket.to(roomId).emit("room:participant-left", {
     name: name || "Participant",
     role,
     explicit: explicitLeave,
