@@ -9,5 +9,4 @@ dist/
 .idea/
 public/movie/movie.mp4
 auth.pid
-.vercel
 .env*
