@@ -181,6 +181,12 @@ function App() {
       setTimeout(() => setFloatingReaction(null), 1200);
     };
 
+    const onFeeling = ({ value, user }) => {
+      clearTimeout(feelToastTimer.current);
+      setFeelToast({ id: Date.now(), text: feelingDisplay(value), user });
+      feelToastTimer.current = setTimeout(() => setFeelToast(null), 3200);
+    };
+
     const onLeft = ({ state }) => {
       if (hasLeftRef.current || isCleaningUpRef.current) return;
       if (partnerLeftHandledRef.current) return;
