@@ -85,6 +85,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(true);
+  const [copyStatus, setCopyStatus] = useState("");
   const [iceInfo, setIceInfo] = useState("");
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [partnerLeftAlert, setPartnerLeftAlert] = useState(false);
@@ -108,6 +109,7 @@ function App() {
   const chromeTimer = useRef(null);
   const remoteStreamRef = useRef(null);
   const reconnectTimer = useRef(null);
+  const copyTimer = useRef(null);
   const lastRestart = useRef(0);
   const connectionLost = useRef(false);
 
@@ -419,6 +421,32 @@ function App() {
     }
   }
 
+  async function copyHeaderInvite() {
+    if (!inviteLink) return;
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      ok = true;
+    } catch {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = inviteLink;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch {
+        ok = false;
+      }
+    }
+    const next = ok ? "ok" : "err";
+    clearTimeout(copyTimer.current);
+    setCopyStatus(next);
+    copyTimer.current = setTimeout(() => setCopyStatus(""), next === "ok" ? 2000 : 1500);
+  }
+
   function sendMessage(e) {
     e.preventDefault();
     if (!message.trim()) return;
@@ -704,6 +732,18 @@ setRoomId("");
               {iceInfo}
             </div>
           )}
+          <button
+            className={`inviter ${copyStatus === "ok" ? "ok" : ""} ${copyStatus === "err" ? "err" : ""}`}
+            onClick={copyHeaderInvite}
+            title="Copy invitation link"
+          >
+            {copyStatus === "ok" ? (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+            ) : (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+            )}
+            <span key={copyStatus} className="ib-txt">{copyStatus === "ok" ? "Copié !" : "Inviter"}</span>
+          </button>
           <button
             className={`chat-toggle ${sidebarOpen ? "active" : ""}`}
             onClick={() => setSidebarOpen((o) => !o)}

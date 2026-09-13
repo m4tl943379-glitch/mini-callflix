@@ -79,6 +79,23 @@ button { cursor: pointer; }
 .chat-toggle:hover { background: rgba(255,255,255,.12); }
 .chat-toggle.active { background: rgba(229,9,20,.18); border-color: rgba(229,9,20,.4); color: #e50914; }
 .chat-toggle span { display: none; }
+.inviter {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.1);
+  color: #aaa; padding: 8px 14px; border-radius: 10px; cursor: pointer;
+  transition: background .2s, border-color .2s, color .2s;
+}
+.inviter svg { flex-shrink: 0; }
+.inviter:hover { background: rgba(255,255,255,.12); }
+.inviter .ib-txt { font-size: 13px; line-height: 1; display: inline-block; animation: ibSwap .28s ease; }
+.inviter.ok {
+  color: #46d369; border-color: rgba(70,211,105,.45); background: rgba(70,211,105,.14);
+}
+.inviter.ok .ib-txt, .inviter.ok svg { animation: ibPop .32s cubic-bezier(.2,.9,.3,1.35); }
+.inviter.err { animation: ibShake .4s ease; }
+@keyframes ibSwap { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes ibPop { from { opacity: 0; transform: scale(.72); } to { opacity: 1; transform: scale(1); } }
+@keyframes ibShake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 .leave {
   background: transparent; border: 1px solid #2b2b31; color: #aaa;
   padding: 8px 13px; border-radius: 10px; font-size: 13px;
