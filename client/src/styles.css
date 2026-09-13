@@ -264,8 +264,7 @@ button { cursor: pointer; }
 .reactions button { font-size: 15px; padding: 6px 8px; border: 0; background: transparent; color: #fff; cursor: pointer; }
 .reactions button:hover { background: rgba(255,255,255,.1); border-radius: 8px; }
 
-/* chrome hidden (auto-hide on idle) */
-.chrome-hidden .scene-topbar { opacity: 0; transform: translateY(-4px); pointer-events: none; }
+/* chrome hidden (auto-hide on idle) — top actions (title / Link / Start Movie) stay visible */
 .chrome-hidden .control-bar  { opacity: 0; transform: translate(-50%, 6px); pointer-events: none; }
 
 /* ───────── ROOM — fullscreen ───────── */
