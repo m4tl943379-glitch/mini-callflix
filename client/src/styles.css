@@ -389,6 +389,17 @@ button { cursor: pointer; }
   .hero h1 { font-size: 46px; }
   .actions { flex-direction: column; }
   .actions button { width: 100%; }
+  .feel-panel { position: fixed; left: 50%; right: auto; width: min(272px, calc(100vw - 28px)); bottom: 74px; }
+  @keyframes cfPanelInM {
+    from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(.95); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  }
+  .feel-panel { animation-name: cfPanelInM; }
+  .feel-panel.feel-closing { animation-name: cfPanelOutM; }
+  @keyframes cfPanelOutM {
+    from { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+    to { opacity: 0; transform: translateX(-50%) translateY(10px) scale(.95); }
+  }
 }
 
 /* ───────── LEAVE / PARTNER-LEFT modals & thanks screen ───────── */
@@ -513,6 +524,11 @@ button { cursor: pointer; }
   background: rgba(255, 70, 70, .16); color: #fff;
   box-shadow: 0 0 22px rgba(255, 60, 60, .3);
 }
+.feel-btn.sent {
+  background: rgba(255, 70, 70, .22); color: #fff;
+  border-color: rgba(255, 130, 130, .5);
+  box-shadow: 0 0 24px rgba(255, 60, 60, .4);
+}
 .feel-overlay { position: fixed; inset: 0; z-index: 9; cursor: default; }
 .feel-panel {
   position: absolute; bottom: 52px; left: 50%; transform: translateX(-50%);
@@ -528,10 +544,23 @@ button { cursor: pointer; }
   from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(.95); }
   to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
 }
+.feel-panel.feel-closing { animation: cfPanelOut .24s ease both; }
+@keyframes cfPanelOut {
+  from { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  to { opacity: 0; transform: translateX(-50%) translateY(10px) scale(.95); }
+}
 .feel-title {
+  position: relative;
   font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
   color: rgba(255, 200, 200, .75); text-align: center; margin-bottom: 8px;
 }
+.feel-close {
+  position: absolute; right: -3px; top: -7px;
+  appearance: none; background: none; border: none; cursor: pointer;
+  color: rgba(255, 200, 200, .55); font-size: 13px; line-height: 1;
+  padding: 4px; border-radius: 8px; transition: color .2s ease, background .2s ease;
+}
+.feel-close:hover { color: #fff; background: rgba(255, 70, 70, .2); }
 .feel-options { display: flex; flex-direction: column; gap: 2px; }
 .feel-option {
   appearance: none; border: none; background: transparent; cursor: pointer;

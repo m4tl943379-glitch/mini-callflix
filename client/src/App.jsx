@@ -44,21 +44,21 @@ const reactions = ["❤️", "😂", "😱", "🔥"];
 
 const FEELING_OPTIONS = [
   { key: "i_love_you", emoji: "❤️", label: "I love you" },
-  { key: "still_here", emoji: "🫶", label: "I'm still here" },
+  { key: "im_still_here", emoji: "🫶", label: "I'm still here" },
   { key: "could_be_us", emoji: "💭", label: "Could be us" },
-  { key: "wanna_do_this", emoji: "🥹", label: "I wanna do this with you" },
-  { key: "miss_you", emoji: "💌", label: "I miss you" },
+  { key: "i_wanna_do_this_with_you", emoji: "🥹", label: "I wanna do this with you" },
+  { key: "i_miss_you", emoji: "💌", label: "I miss you" },
   { key: "this_is_us", emoji: "❤️", label: "This is us" }
 ];
 
 function feelingDisplay(value) {
   switch (value) {
     case "could_be_us": return "Could be us. ❤️";
-    case "wanna_do_this": return "I wanna do this with you. 🫶";
+    case "i_wanna_do_this_with_you": return "I wanna do this with you. 🫶";
     case "this_is_us": return "This is us. ❤️";
     case "i_love_you": return "❤️ I love you";
-    case "still_here": return "🫶 I'm still here";
-    case "miss_you": return "💌 I miss you";
+    case "im_still_here": return "🫶 I'm still here";
+    case "i_miss_you": return "💌 I miss you";
     default: return value;
   }
 }
@@ -96,7 +96,11 @@ function App() {
   const [feelingOpen, setFeelingOpen] = useState(false);
   const [feelText, setFeelText] = useState("");
   const [feelToast, setFeelToast] = useState(null);
+  const [feelSent, setFeelSent] = useState(false);
+  const [feelClosing, setFeelClosing] = useState(false);
   const feelToastTimer = useRef(null);
+  const feelCloseTimer = useRef(null);
+  const feelSentTimer = useRef(null);
   const hasLeftRef = useRef(false);
   const partnerLeftHandledRef = useRef(false);
   const isCleaningUpRef = useRef(false);
@@ -232,8 +236,10 @@ function App() {
       setMovieUrl(MOVIE_SRC);
       setIntroStep("idle");
       setFeelingOpen(false);
+      setFeelClosing(false);
       setFeelText("");
       setFeelToast(null);
+      setFeelSent(false);
       setView("home");
       window.history.replaceState({}, "", "/");
       hasLeftRef.current = false;
@@ -454,12 +460,31 @@ function startMovie() {
     setTimeout(() => setFloatingReaction(null), 1200);
   }
 
+  function closeFeelingMenu() {
+    if (feelClosing || !feelingOpen) return;
+    setFeelClosing(true);
+    feelCloseTimer.current = setTimeout(() => {
+      setFeelingOpen(false);
+      setFeelClosing(false);
+    }, 240);
+  }
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") closeFeelingMenu(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feelingOpen, feelClosing]);
+
   function sendFeeling(value) {
     const text = String(value || "").trim();
     if (!text) return;
     socket.emit("feel:send", { roomId, value: text });
-    setFeelingOpen(false);
     setFeelText("");
+    setFeelSent(true);
+    clearTimeout(feelSentTimer.current);
+    feelSentTimer.current = setTimeout(() => setFeelSent(false), 1100);
+    closeFeelingMenu();
   }
 
   function openSurprise() {
@@ -499,6 +524,7 @@ function stopLocalMedia() {
     setEditingMovie(false);
     setIntroStep("idle");
     setFeelingOpen(false);
+    setFeelClosing(false);
     setFeelText("");
     setFeelToast(null);
   }
@@ -567,6 +593,7 @@ setRoomId("");
     setNotice("");
     setIntroStep("idle");
     setFeelingOpen(false);
+    setFeelClosing(false);
     setFeelText("");
     setFeelToast(null);
     window.history.replaceState({}, "", "/");
@@ -841,22 +868,30 @@ setRoomId("");
               <div className="reactions">
                 {reactions.map((r) => <button key={r} onClick={() => sendReaction(r)} title={`Send ${r}`}>{r}</button>)}
               </div>
-              {isSalmaMode && !soloMode && (
+              {!soloMode && roomState?.count === 2 && (
                 <>
                   <span className="bar-sep" />
                   <div className="feel-wrap">
                     <button
-                      className={`feel-btn ${feelingOpen ? "active" : ""}`}
-                      onClick={() => setFeelingOpen((o) => !o)}
+                      className={`feel-btn ${feelingOpen ? "active" : ""} ${feelSent ? "sent" : ""}`}
+                      onClick={() => {
+                        if (feelingOpen) { closeFeelingMenu(); return; }
+                        clearTimeout(feelCloseTimer.current);
+                        setFeelClosing(false);
+                        setFeelingOpen(true);
+                      }}
                       title="Send a feeling"
                     >
-                      ♡ Feeling
+                      {feelSent ? "Sent ❤️" : "♡ Feeling"}
                     </button>
                     {feelingOpen && (
                       <>
-                        <div className="feel-overlay" onClick={() => setFeelingOpen(false)} />
-                        <div className="feel-panel">
-                          <div className="feel-title">Send her a feeling</div>
+                        <div className={`feel-overlay ${feelClosing ? "closing" : ""}`} onClick={closeFeelingMenu} />
+                        <div className={`feel-panel ${feelClosing ? "feel-closing" : ""}`}>
+                          <div className="feel-title">
+                            Send a feeling
+                            <button className="feel-close" onClick={closeFeelingMenu} title="Close">✕</button>
+                          </div>
                           <div className="feel-options">
                             {FEELING_OPTIONS.map((f) => (
                               <button key={f.key} className="feel-option" onClick={() => sendFeeling(f.key)}>
