@@ -84,6 +84,7 @@ function App() {
   const [playback, setPlayback] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [chatOpen, setChatOpen] = useState(true);
+  const [introOverlay, setIntroOverlay] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(true);
   const [copyStatus, setCopyStatus] = useState("");
@@ -405,7 +406,11 @@ function App() {
   }, []);
 
   function startMovie() {
-    playerRef.current?.play();
+setIntroOverlay(true);
+      setTimeout(() => {
+        setIntroOverlay(false);
+        playerRef.current?.play();
+      }, 3400);
   }
 
   function saveMovieLink() {
@@ -955,6 +960,14 @@ setRoomId("");
         )}
       </div>
 
+      {introOverlay && (
+        <div className="intro-overlay">
+          <div className="intro-message">
+            For the next two hours, it&rsquo;s just you, me, and our little world.{" "}
+            <span className="intro-heart">❤️🎬</span>
+          </div>
+        </div>
+      )}
       {showLeaveConfirm && (
         <div className="cf-modal-backdrop" onClick={() => setShowLeaveConfirm(false)}>
           <div className="cf-modal" onClick={(e) => e.stopPropagation()}>
