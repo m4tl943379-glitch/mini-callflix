@@ -649,7 +649,7 @@ setRoomId("");
       <main className="landing">
         <div className="ambient" />
         <section className="hero">
-          <div className="brand">CALL<span>FLIX</span></div>
+          <div className="brand">Call<span>Flix</span></div>
           <p className="eyebrow">PRIVATE WATCH PARTY FOR TWO</p>
           <h1>Watch together,<br /><em>even when you're apart.</em></h1>
           <p className="subtitle">One private room. One movie. A real video call. Perfectly simple.</p>
@@ -679,9 +679,9 @@ setRoomId("");
             <rect x="1" y="1" width="22" height="22" rx="7" fill="url(#cfglg)" />
             <path d="M10 7.6 17 12l-7 4.4z" fill="#fff" />
           </svg>
-          CALL<span>FLIX</span>
+          Call<span>Flix</span>
         </div>
-          <h2>{joining ? "Join CALLFLIX" : "Create your room"}</h2>
+          <h2>{joining ? "Join CallFlix" : "Create your room"}</h2>
           <p>{joining ? "Enter the room link or ID your friend sent you." : "Create a private room and invite one person."}</p>
 
           <label>Display name</label>
@@ -739,7 +739,7 @@ setRoomId("");
             <rect x="1" y="1" width="22" height="22" rx="7" fill="url(#cfglg2)" />
             <path d="M10 7.6 17 12l-7 4.4z" fill="#fff" />
           </svg>
-          CALL<span>FLIX</span>
+          Call<span>Flix</span>
         </div>
         {!soloMode && <div className="room-pill">ROOM <strong>{roomId}</strong></div>}
         <div className="topbar-actions">
