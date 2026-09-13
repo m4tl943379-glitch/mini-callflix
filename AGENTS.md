@@ -38,9 +38,9 @@ Vérification syntaxe serveur : `node --check server/server.js`.
 
 ## Protocole Socket.IO (événements)
 
-Client → serveur : `room:create`, `room:join`, `webrtc:offer|answer|ice`, `media:state`, `film:action` (les 2 membres sont leaders), `film:sync`, `movie:set` (hôte), `chat:message`, `reaction:send`, `room:leave`.
+Client → serveur : `room:create`, `room:join`, `webrtc:offer|answer|ice`, `media:state`, `film:action` (les 2 membres sont leaders), `film:sync`, `movie:set` (hôte), `chat:message`, `reaction:send`, `feel:send`, `room:leave`.
 
-Serveur → client : `room:participant-joined`, `room:participant-left`, `room:expired`, `webrtc:offer|answer|ice`, `media:state`, `film:action` (avec `from` = socket id émetteur), `film:sync`, `movie:url`, `chat:message`, `reaction:show`.
+Serveur → client : `room:participant-joined`, `room:participant-left`, `room:expired`, `webrtc:offer|answer|ice`, `media:state`, `film:action` (avec `from` = socket id émetteur), `film:sync`, `movie:url`, `chat:message`, `reaction:show`, `feel:show`.
 
 Règles serveur : max 2 participants par room ; les URL de film n'acceptent que `http(s)://`, `/chemin` ou vide ; seul l'hôte change le film (`movie:set`, reset l'état à 0) ; `film:action` est accepté des 2 membres (2 leaders, anti-boucle via `from` + `mirror` client), le serveur mémorise `{playing, time, updatedAt}` et l'envole aux arrivants (ack de join).
 
@@ -60,3 +60,9 @@ Règles serveur : max 2 participants par room ; les URL de film n'acceptent que 
 ## Limites connues
 
 Pas d'auth, pas de persistance du chat, une seule vidéo à la fois, synchro simple sans correction de dérive.
+
+## Expérience spéciale « Salma » (couchée sur l'architecture existante)
+
+- Activation : `isSalmaMode` = nom affiché (minuscules) contient `salma`, `sisi` ou `sousou` (substring, case-insensitive). Ne modifie **rien** pour les autres utilisateurs.
+- Déclencheur : quand `roomState.count === 2` et `isSalmaMode`, `introStep` passe `idle → intro` (overlay plein écran `.cf-intro`, z-index 90) : 3 phrases en fondu séquencé (`--d` = délai CSS, pas de timers) puis bouton **Open your surprise ❤️** → `capsule` (2 phrases + message Arabizi exact `salma mahma tbdlt layem o wa9t, …` + bouton **Start Movie**) → `done` (overlay démonté — vérifier la condition `introStep === "intro" || "capsule"`). Start Movie = `playerRef.play()` (2 leaders → sync normale). Le film reste monté en dessous (aucun remount). Reset des états dans `onExpired`, `resetRoomUi`, `continueWatchingSolo`.
+- Feelings : bouton discret **♡ Feeling** dans la `control-bar` (seulement si `isSalmaMode && !soloMode`), panneau glass `.feel-panel` (6 options exactes + message libre ≤ 80 chars). Envoi `feel:send` → serveur valide (`trim`, ≤ 120) et relaie en `socket.to` avec `user` → `feel:show` → toast `.feel-toast` (fixed top, fade in/out ~3 s, jamais au centre du film). Rendu spécial des 3 feelings forts (`Could be us. ❤️`, etc. via `feelingDisplay`). Pas de compteurs ; les two membres leaders et la hiérarchie visuelle MOVIE > CAM > Feeling sont préservés.

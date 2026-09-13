@@ -380,3 +380,155 @@ button { cursor: pointer; }
   from { opacity: 0; transform: scale(.92) translateY(14px); }
   to { opacity: 1; transform: none; }
 }
+
+/* ───────── SALMA cinematic experience (intro, time capsule) ───────── */
+.cf-intro {
+  position: fixed; inset: 0; z-index: 90;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center; overflow: hidden;
+  color: #fff;
+  background:
+    radial-gradient(120% 90% at 50% 18%, rgba(120, 8, 8, .20), transparent 60%),
+    radial-gradient(85% 60% at 50% 96%, rgba(10, 10, 14, .92), transparent 72%),
+    linear-gradient(180deg, #050507 0%, #0a0a0f 55%, #050507 100%);
+  animation: cfFadeIn .6s ease;
+}
+.cf-cine-grain {
+  position: absolute; inset: 0; opacity: .045; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.cf-intro-core {
+  position: relative; z-index: 1;
+  max-width: 740px; padding: 0 28px;
+  display: flex; flex-direction: column; align-items: center; gap: 28px;
+}
+.cf-line {
+  margin: 0;
+  font-size: clamp(21px, 3.4vw, 34px); font-weight: 300;
+  letter-spacing: .03em; line-height: 1.35;
+  opacity: 0; text-shadow: 0 0 26px rgba(255, 40, 40, .18);
+  animation: cfIntroIn 1.2s ease both; animation-delay: var(--d);
+}
+.cf-message {
+  margin: 0; max-width: 640px;
+  font-size: clamp(17px, 2.6vw, 24px); font-style: italic; font-weight: 400;
+  line-height: 1.6; color: #ffd9d9;
+  opacity: 0; text-shadow: 0 0 34px rgba(255, 60, 60, .28);
+  animation: cfIntroIn 1.5s ease both; animation-delay: var(--d);
+}
+.cf-intro-btn {
+  appearance: none; cursor: pointer;
+  border: 1px solid rgba(255, 60, 60, .55);
+  background: rgba(255, 50, 50, .08);
+  color: #ffb3b3; font-family: inherit; font-size: 14px;
+  letter-spacing: .1em; text-transform: uppercase;
+  padding: 14px 32px; border-radius: 999px;
+  box-shadow: 0 0 20px rgba(255, 50, 50, .14), inset 0 0 20px rgba(255, 50, 50, .06);
+  opacity: 0; animation: cfIntroIn 1s ease both; animation-delay: var(--d);
+  transition: transform .3s ease, box-shadow .3s ease, background .3s ease, color .3s ease;
+}
+.cf-intro-btn:hover {
+  transform: translateY(-2px) scale(1.04);
+  background: rgba(255, 60, 60, .18); color: #fff;
+  box-shadow: 0 0 40px rgba(255, 50, 50, .32), inset 0 0 26px rgba(255, 50, 50, .1);
+}
+.cf-intro-btn:active { transform: translateY(0) scale(.99); }
+@keyframes cfIntroIn {
+  from { opacity: 0; transform: translateY(14px); filter: blur(5px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+.cf-particles { position: absolute; inset: 0; pointer-events: none; }
+.cf-particle {
+  position: absolute; width: 2px; height: 2px; border-radius: 50%;
+  background: rgba(255, 220, 220, .55);
+  box-shadow: 0 0 7px rgba(255, 80, 80, .8);
+  opacity: 0; animation: cfFloat ease-in-out infinite;
+}
+@keyframes cfFloat {
+  0%, 100% { opacity: 0; transform: translate(0, 0); }
+  25% { opacity: .55; }
+  55% { transform: translate(9px, -38px); opacity: .25; }
+  80% { opacity: .15; }
+}
+
+/* ───────── SALMA feeling button · panel · partner toast ───────── */
+.feel-wrap { position: relative; }
+.feel-btn {
+  appearance: none; cursor: pointer;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 80, 80, .35);
+  color: #f5b9b9; font-family: inherit; font-size: 12.5px;
+  letter-spacing: .05em; padding: 7px 13px; border-radius: 999px;
+  box-shadow: 0 0 12px rgba(255, 60, 60, .12);
+  transition: all .3s ease;
+}
+.feel-btn:hover, .feel-btn.active {
+  background: rgba(255, 70, 70, .16); color: #fff;
+  box-shadow: 0 0 22px rgba(255, 60, 60, .3);
+}
+.feel-overlay { position: fixed; inset: 0; z-index: 9; cursor: default; }
+.feel-panel {
+  position: absolute; bottom: 52px; left: 50%; transform: translateX(-50%);
+  width: 268px; z-index: 10;
+  background: rgba(18, 14, 15, .84);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 80, 80, .22); border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 18px 54px rgba(0, 0, 0, .55), 0 0 32px rgba(255, 50, 50, .08);
+  animation: cfPanelIn .24s ease both;
+}
+@keyframes cfPanelIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(.95); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+.feel-title {
+  font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+  color: rgba(255, 200, 200, .75); text-align: center; margin-bottom: 8px;
+}
+.feel-options { display: flex; flex-direction: column; gap: 2px; }
+.feel-option {
+  appearance: none; border: none; background: transparent; cursor: pointer;
+  color: #f2e2e2; font-family: inherit; font-size: 13.5px; text-align: left;
+  padding: 9px 12px; border-radius: 10px;
+  transition: background .2s ease, color .2s ease, transform .2s ease;
+}
+.feel-option:hover {
+  background: rgba(255, 70, 70, .14); color: #fff; transform: translateX(3px);
+}
+.feel-write {
+  display: flex; gap: 6px; margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+}
+.feel-write input {
+  flex: 1; min-width: 0; outline: none;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 80, 80, .22); border-radius: 999px;
+  color: #fff; font-family: inherit; font-size: 12.5px; padding: 7px 12px;
+}
+.feel-write input:focus { border-color: rgba(255, 80, 80, .6); }
+.feel-write button {
+  appearance: none; cursor: pointer;
+  background: rgba(255, 70, 70, .12);
+  border: 1px solid rgba(255, 80, 80, .3);
+  color: #ffb3b3; font-family: inherit; font-size: 12px;
+  padding: 7px 13px; border-radius: 999px;
+  transition: all .25s ease;
+}
+.feel-write button:hover { background: rgba(255, 70, 70, .24); color: #fff; }
+.feel-toast {
+  position: fixed; top: 74px; left: 50%; transform: translateX(-50%);
+  z-index: 92; max-width: 70vw; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; pointer-events: none;
+  background: rgba(16, 12, 13, .82);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 90, 90, .28); border-radius: 999px;
+  color: #ffecec; font-size: 13.5px; padding: 9px 18px;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, .5);
+  animation: cfToast 3.2s ease forwards;
+}
+@keyframes cfToast {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+  8% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  88% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+}

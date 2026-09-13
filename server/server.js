@@ -235,6 +235,22 @@ io.on("connection", (socket) => {
     socket.to(roomId).emit("reaction:show", { reaction, id: crypto.randomUUID() });
   });
 
+  // Private "feeling" signal between the two members (Salma experience).
+  socket.on("feel:send", ({ roomId, value }) => {
+    if (socket.data.roomId !== roomId) return;
+    const text = String(value || "").trim().slice(0, 120);
+    if (!text) return;
+    const room = rooms.get(roomId);
+    const sender = roleOf(room, socket.id);
+    const user = sender === "host" ? room.host?.name : room.guest?.name;
+    socket.to(roomId).emit("feel:show", {
+      value: text,
+      user: user || "Partner",
+      from: socket.id,
+      timestamp: Date.now()
+    });
+  });
+
   socket.on("room:leave", () => handleDisconnect(socket, true));
   socket.on("disconnect", () => handleDisconnect(socket, false));
 });

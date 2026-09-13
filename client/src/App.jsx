@@ -42,6 +42,27 @@ async function getIceServers() {
 
 const reactions = ["❤️", "😂", "😱", "🔥"];
 
+const FEELING_OPTIONS = [
+  { key: "i_love_you", emoji: "❤️", label: "I love you" },
+  { key: "still_here", emoji: "🫶", label: "I'm still here" },
+  { key: "could_be_us", emoji: "💭", label: "Could be us" },
+  { key: "wanna_do_this", emoji: "🥹", label: "I wanna do this with you" },
+  { key: "miss_you", emoji: "💌", label: "I miss you" },
+  { key: "this_is_us", emoji: "❤️", label: "This is us" }
+];
+
+function feelingDisplay(value) {
+  switch (value) {
+    case "could_be_us": return "Could be us. ❤️";
+    case "wanna_do_this": return "I wanna do this with you. 🫶";
+    case "this_is_us": return "This is us. ❤️";
+    case "i_love_you": return "❤️ I love you";
+    case "still_here": return "🫶 I'm still here";
+    case "miss_you": return "💌 I miss you";
+    default: return value;
+  }
+}
+
 function App() {
   const [view, setView] = useState("home");
   const [name, setName] = useState("");
@@ -68,6 +89,11 @@ function App() {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [partnerLeftAlert, setPartnerLeftAlert] = useState(false);
   const [soloMode, setSoloMode] = useState(false);
+  const [introStep, setIntroStep] = useState("idle"); // idle | intro | capsule | done
+  const [feelingOpen, setFeelingOpen] = useState(false);
+  const [feelText, setFeelText] = useState("");
+  const [feelToast, setFeelToast] = useState(null);
+  const feelToastTimer = useRef(null);
   const hasLeftRef = useRef(false);
   const partnerLeftHandledRef = useRef(false);
   const isCleaningUpRef = useRef(false);
@@ -89,6 +115,11 @@ function App() {
     () => roomId ? `${window.location.origin}/room/${roomId}` : "",
     [roomId]
   );
+
+  const isSalmaMode = useMemo(() => {
+    const n = (name || "").toLowerCase();
+    return n.includes("salma") || n.includes("sisi") || n.includes("sousou");
+  }, [name]);
 
   const pathRoomId = window.location.pathname.startsWith("/room/")
     ? window.location.pathname.split("/room/")[1]
@@ -188,6 +219,10 @@ function App() {
       setLinkInput("");
       setEditingMovie(false);
       setMovieUrl(MOVIE_SRC);
+      setIntroStep("idle");
+      setFeelingOpen(false);
+      setFeelText("");
+      setFeelToast(null);
       setView("home");
       window.history.replaceState({}, "", "/");
     };
@@ -201,6 +236,7 @@ function App() {
     socket.on("room:expired", onExpired);
     socket.on("chat:message", onChat);
     socket.on("reaction:show", onReaction);
+    socket.on("feel:show", onFeeling);
     socket.on("room:participant-left", onLeft);
 
     return () => {
@@ -213,9 +249,16 @@ function App() {
       socket.off("room:expired", onExpired);
       socket.off("chat:message", onChat);
       socket.off("reaction:show", onReaction);
+      socket.off("feel:show", onFeeling);
       socket.off("room:participant-left", onLeft);
     };
   }, [role, roomId]);
+
+  useEffect(() => {
+    if (!isSalmaMode || introStep !== "idle" || roomState?.count !== 2) return;
+    const t = setTimeout(() => setIntroStep("intro"), 400);
+    return () => clearTimeout(t);
+  }, [isSalmaMode, introStep, roomState?.count]);
 
   async function flushCandidates() {
     for (const candidate of pendingCandidates.current) {
@@ -381,6 +424,23 @@ function App() {
     setTimeout(() => setFloatingReaction(null), 1200);
   }
 
+  function sendFeeling(value) {
+    const text = String(value || "").trim();
+    if (!text) return;
+    socket.emit("feel:send", { roomId, value: text });
+    setFeelingOpen(false);
+    setFeelText("");
+  }
+
+  function openSurprise() {
+    setIntroStep("capsule");
+  }
+
+  function startMovieFromCapsule() {
+    setIntroStep("done");
+    playerRef.current?.play();
+  }
+
 function stopLocalMedia() {
     localStream.current?.getTracks().forEach((t) => t.stop());
     localStream.current = null;
@@ -403,6 +463,10 @@ function stopLocalMedia() {
     setMessages([]);
     setLinkInput("");
     setEditingMovie(false);
+    setIntroStep("idle");
+    setFeelingOpen(false);
+    setFeelText("");
+    setFeelToast(null);
   }
 
   function backToHome() {
@@ -461,10 +525,14 @@ function stopLocalMedia() {
     stopLocalMedia();
     closePeerConnection();
     setIceInfo("");
-    setRoomId("");
+setRoomId("");
     setRoomState(null);
     setPlayback(null);
     setNotice("");
+    setIntroStep("idle");
+    setFeelingOpen(false);
+    setFeelText("");
+    setFeelToast(null);
     window.history.replaceState({}, "", "/");
   }
 
@@ -725,10 +793,52 @@ function stopLocalMedia() {
               <div className="reactions">
                 {reactions.map((r) => <button key={r} onClick={() => sendReaction(r)} title={`Send ${r}`}>{r}</button>)}
               </div>
+              {isSalmaMode && !soloMode && (
+                <>
+                  <span className="bar-sep" />
+                  <div className="feel-wrap">
+                    <button
+                      className={`feel-btn ${feelingOpen ? "active" : ""}`}
+                      onClick={() => setFeelingOpen((o) => !o)}
+                      title="Send a feeling"
+                    >
+                      ♡ Feeling
+                    </button>
+                    {feelingOpen && (
+                      <>
+                        <div className="feel-overlay" onClick={() => setFeelingOpen(false)} />
+                        <div className="feel-panel">
+                          <div className="feel-title">Send her a feeling</div>
+                          <div className="feel-options">
+                            {FEELING_OPTIONS.map((f) => (
+                              <button key={f.key} className="feel-option" onClick={() => sendFeeling(f.key)}>
+                                <span>{f.emoji}</span> {f.label}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="feel-write">
+                            <input
+                              value={feelText}
+                              onChange={(e) => setFeelText(e.target.value)}
+                              maxLength={80}
+                              placeholder="Write something..."
+                              onKeyDown={(e) => { if (e.key === "Enter") sendFeeling(feelText); }}
+                            />
+                            <button onClick={() => sendFeeling(feelText)}>Send</button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
               <button onClick={toggleFullscreen} title="Fullscreen">{isFullscreen ? "⤢" : "⛶"}</button>
             </div>
 
             {floatingReaction && <div className="reaction-float" key={floatingReaction.id}>{floatingReaction.reaction}</div>}
+              {feelToast && (
+                <div className="feel-toast" key={feelToast.id}>{feelToast.user}: {feelToast.text}</div>
+              )}
           </div>
         </section>
 
@@ -793,6 +903,46 @@ function stopLocalMedia() {
               <button className="primary" onClick={continueWatchingSolo}>Continue Watching</button>
               <button className="ghost" onClick={confirmLeaveRoom}>Leave Room</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {isSalmaMode && (introStep === "intro" || introStep === "capsule") && (
+        <div className="cf-intro">
+          <div className="cf-cine-grain" />
+          <div className="cf-particles">
+            {Array.from({ length: 9 }).map((_, i) => (
+              <span
+                key={i}
+                className="cf-particle"
+                style={{
+                  left: `${(i * 13 + 6) % 92}%`,
+                  top: `${28 + ((i * 17) % 46)}%`,
+                  animationDuration: `${5 + (i % 3) * 2}s`,
+                  animationDelay: `${i * 0.9}s`
+                }}
+              />
+            ))}
+          </div>
+          <div className="cf-intro-core">
+            {introStep === "intro" && (
+              <>
+                <p className="cf-line" style={{ "--d": "0.3s" }}>Before we travel through time…</p>
+                <p className="cf-line" style={{ "--d": "3.8s" }}>I wanted to leave something here for you.</p>
+                <p className="cf-line" style={{ "--d": "7.6s" }}>Tonight isn't just about the movie.</p>
+                <button className="cf-intro-btn" style={{ "--d": "11.4s" }} onClick={openSurprise}>Open your surprise ❤️</button>
+              </>
+            )}
+            {introStep === "capsule" && (
+              <>
+                <p className="cf-line" style={{ "--d": "0.3s" }}>Some moments become memories.</p>
+                <p className="cf-line" style={{ "--d": "3.8s" }}>Some memories become forever.</p>
+                <p className="cf-message" style={{ "--d": "7.6s" }}>
+                  salma mahma tbdlt layem o wa9t, fma hajet nhebhom yab9ou nafshom, nhebek barcha doctourtyy 🥹🥹❤️
+                </p>
+                <button className="cf-intro-btn" style={{ "--d": "12.4s" }} onClick={startMovieFromCapsule}>Start Movie</button>
+              </>
+            )}
           </div>
         </div>
       )}
