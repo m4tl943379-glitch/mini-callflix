@@ -324,6 +324,12 @@ button { cursor: pointer; }
 @media (min-width: 640px) {
   .chat-toggle span { display: inline; }
 }
+/* ───────── large screens: movie-first ───────── */
+@media (min-width: 1600px) {
+  .room-page { padding: 10px; }
+  .room-page .sidebar { width: 260px; }
+  .movie-scene { --cam-w: clamp(140px, 10.5vw, 200px); }
+}
 @media (max-width: 900px) {
   .room-page { height: auto; min-height: 100vh; overflow: auto; }
   .workspace { flex-direction: column; }
