@@ -412,15 +412,6 @@ function App() {
     socket.emit("movie:set", { roomId, movieUrl: newLink.trim() });
   }
 
-  async function copyInvite() {
-    try {
-      await navigator.clipboard.writeText(inviteLink);
-      setNotice("Invitation link copied.");
-    } catch {
-      setNotice(inviteLink);
-    }
-  }
-
   async function copyHeaderInvite() {
     if (!inviteLink) return;
     let ok = false;
@@ -894,17 +885,6 @@ setRoomId("");
 
         {sidebarOpen && (
           <aside className="sidebar">
-            {!soloMode && (
-              <div className="invite-box">
-                <div>
-                  <span className="eyebrow">PRIVATE ROOM</span>
-                  <strong>{roomState?.count || 1}/2 participants</strong>
-                </div>
-                <button onClick={copyInvite}>Copy invite link</button>
-                {notice && <small>{notice}</small>}
-              </div>
-            )}
-
             {!soloMode && (
               <div className="status">
                 <span className={`dot ${roomState?.count === 2 ? "online" : ""}`} />
