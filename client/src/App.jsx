@@ -405,12 +405,8 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function startMovie() {
-setIntroOverlay(true);
-      setTimeout(() => {
-        setIntroOverlay(false);
-        playerRef.current?.play();
-      }, 3400);
+function startMovie() {
+    playerRef.current?.play();
   }
 
   function saveMovieLink() {
@@ -472,7 +468,11 @@ setIntroOverlay(true);
 
   function startMovieFromCapsule() {
     setIntroStep("done");
-    playerRef.current?.play();
+    setIntroOverlay(true);
+    setTimeout(() => {
+      setIntroOverlay(false);
+      playerRef.current?.play();
+    }, 3400);
   }
 
 function stopLocalMedia() {
