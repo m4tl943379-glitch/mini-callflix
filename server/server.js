@@ -3,6 +3,7 @@ import http from "http";
 import cors from "cors";
 import { Server } from "socket.io";
 import crypto from "crypto";
+import { Readable } from "stream";
 
 const PORT = process.env.PORT || 3001;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
@@ -109,6 +110,42 @@ function buildIceConfig() {
 app.get("/api/ice-config", (_req, res) => {
   res.json({ iceServers: buildIceConfig() });
 });
+
+// Video proxy: re-serves a remote mp4 (MOVIE_SOURCE_URL) with video/mp4 MIME
+// and Range support so the browser <video> can play/seek it directly.
+const MOVIE_SOURCE_URL =
+  process.env.MOVIE_SOURCE_URL ||
+  "https://github.com/m4tl943379-glitch/callflix-movie/releases/download/movie-1/movie.mp4";
+
+async function proxyMovie(req, res) {
+  try {
+    const upstream = await fetch(MOVIE_SOURCE_URL, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (mini-callflix)",
+        ...(req.headers.range ? { Range: req.headers.range } : {})
+      },
+      redirect: "follow"
+    });
+    if (!upstream.ok && upstream.status !== 206) {
+      return res.status(upstream.status).end();
+    }
+    const h = upstream.headers;
+    res.status(upstream.status === 206 ? 206 : 200);
+    res.set("Content-Type", "video/mp4");
+    res.set("Accept-Ranges", h.get("accept-ranges") || "bytes");
+    res.set("Cache-Control", "public, max-age=3600");
+    if (h.get("content-range")) res.set("Content-Range", h.get("content-range"));
+    if (h.get("content-length")) res.set("Content-Length", h.get("content-length"));
+    const stream = Readable.fromWeb(upstream.body);
+    stream.on("error", () => res.destroy());
+    stream.pipe(res);
+  } catch (err) {
+    if (!res.headersSent) res.status(502).end();
+    else res.destroy(err);
+  }
+}
+
+app.get("/movie/movie.mp4", proxyMovie);
 
 io.on("connection", (socket) => {
   socket.on("room:create", ({ name, movieUrl }, ack) => {

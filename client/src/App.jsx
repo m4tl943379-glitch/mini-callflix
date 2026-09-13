@@ -3,7 +3,7 @@ import { io } from "socket.io-client";
 import MoviePlayer from "./MoviePlayer";
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
-const MOVIE_SRC = "/movie/movie.mp4";
+const MOVIE_SRC = `${SERVER_URL}/movie/movie.mp4`;
 const socket = io(SERVER_URL, { autoConnect: true });
 
 const ICE_SERVERS = [
