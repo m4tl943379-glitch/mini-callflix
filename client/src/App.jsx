@@ -83,6 +83,7 @@ function App() {
   const [newLink, setNewLink] = useState("");
   const [playback, setPlayback] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [chatOpen, setChatOpen] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(true);
   const [copyStatus, setCopyStatus] = useState("");
@@ -105,6 +106,7 @@ function App() {
   const peer = useRef(null);
   const pendingCandidates = useRef([]);
   const playerRef = useRef(null);
+  const pageRef = useRef(null);
   const stageRef = useRef(null);
   const chromeTimer = useRef(null);
   const remoteStreamRef = useRef(null);
@@ -633,7 +635,7 @@ setRoomId("");
   }
 
   function toggleFullscreen() {
-    const el = stageRef.current;
+    const el = pageRef.current;
     if (!el) return;
     if (document.fullscreenElement) {
       document.exitFullscreen?.().catch(() => {});
@@ -712,7 +714,7 @@ setRoomId("");
   }
 
   return (
-    <main className={`room-page ${sidebarOpen ? "" : "chat-closed"}`}>
+    <main ref={pageRef} className={`room-page ${sidebarOpen ? "" : "chat-closed"}`}>
       <header className="topbar">
         <div className="brand small">CALL<span>FLIX</span></div>
         {!soloMode && <div className="room-pill">ROOM <strong>{roomId}</strong></div>}
@@ -764,30 +766,6 @@ setRoomId("");
                 solo={soloMode}
               />
             </div>
-
-            {!soloMode && (
-              <div className="cameras">
-              <div className={`cam-chip self ${media.cameraEnabled ? "" : "cam-off"}`}>
-                {media.cameraEnabled ? (
-                  <video ref={localVideo} autoPlay muted playsInline />
-                ) : (
-                  <div className="cam-placeholder">YOU</div>
-                )}
-                <span className="cam-name">{name || "You"} · {media.micEnabled ? "Mic on" : "Muted"}</span>
-                <div className="cam-actions">
-                  <button title="Toggle camera" onClick={toggleCamera}>{media.cameraEnabled ? "🎥" : "🚫"}</button>
-                  <button title="Toggle microphone" onClick={toggleMic}>{media.micEnabled ? "🎤" : "🔇"}</button>
-                </div>
-              </div>
-
-              <div className="cam-chip remote">
-                <video ref={remoteVideo} autoPlay playsInline />
-                <span className="cam-name">
-                  {role === "host" ? roomState?.guest?.name || "Waiting..." : roomState?.host?.name || "Host"}
-                </span>
-              </div>
-            </div>
-            )}
 
             <div className="scene-topbar">
               <span className="eyebrow">TONIGHT'S MOVIE</span>
@@ -867,7 +845,7 @@ setRoomId("");
                             />
                             <button onClick={() => sendFeeling(feelText)}>Send</button>
                           </div>
-                        </div>
+</div>
                       </>
                     )}
                   </div>
@@ -893,22 +871,62 @@ setRoomId("");
               </div>
             )}
 
-            <div className="chat">
-              <div className="chat-title">Chat</div>
-              <div className="messages">
-                {messages.length === 0 && <div className="empty">Say something while you watch ❤️</div>}
-                {messages.map((m) => (
-                  <div className={`message ${m.role === role ? "mine" : ""}`} key={m.id}>
-                    <small>{m.user}</small>
-                    <p>{m.message}</p>
+            {!soloMode && (
+              <div className="cameras">
+                <div className={`cam-chip self ${media.cameraEnabled ? "" : "cam-off"}`}>
+                  {media.cameraEnabled ? (
+                    <video ref={localVideo} autoPlay muted playsInline />
+                  ) : (
+                    <div className="cam-placeholder">YOU</div>
+                  )}
+                  <span className="cam-name">{name || "You"} · {media.micEnabled ? "Mic on" : "Muted"}</span>
+                  <div className="cam-actions">
+                    <button title="Toggle camera" onClick={toggleCamera}>{media.cameraEnabled ? "🎥" : "🚫"}</button>
+                    <button title="Toggle microphone" onClick={toggleMic}>{media.micEnabled ? "🎤" : "🔇"}</button>
                   </div>
-                ))}
+                </div>
+
+                <div className="cam-chip remote">
+                  <video ref={remoteVideo} autoPlay playsInline />
+                  <span className="cam-name">
+                    {role === "host" ? roomState?.guest?.name || "Waiting..." : roomState?.host?.name || "Host"}
+                  </span>
+                </div>
               </div>
-              <form onSubmit={sendMessage} className="chat-form">
-                <input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Type a message..." />
-                <button>Send</button>
-              </form>
-            </div>
+            )}
+
+            <div className="chat-area">
+              <button
+                className={`chat-icon-btn ${chatOpen ? "hidden" : ""}`}
+                onClick={() => setChatOpen(true)}
+                title="Toggle chat"
+                aria-label="Toggle chat"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
+              </button>
+
+              <div className={`chat-panel ${chatOpen ? "open" : "closed"}`}>
+                <div className="chat">
+                    <div className="chat-title-row">
+                      <div className="chat-title">Chat</div>
+                      <button className="chat-close" onClick={() => setChatOpen(false)} title="Collapse chat">✕</button>
+                    </div>
+                    <div className="messages">
+                      {messages.length === 0 && <div className="empty">Say something while you watch ❤️</div>}
+                      {messages.map((m) => (
+                        <div className={`message ${m.role === role ? "mine" : ""}`} key={m.id}>
+                          <small>{m.user}</small>
+                          <p>{m.message}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <form onSubmit={sendMessage} className="chat-form">
+                      <input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Type a message..." />
+                      <button>Send</button>
+                    </form>
+                  </div>
+                </div>
+              </div>
           </aside>
         )}
       </div>
