@@ -231,6 +231,8 @@ function App() {
       setFeelToast(null);
       setView("home");
       window.history.replaceState({}, "", "/");
+      hasLeftRef.current = false;
+      partnerLeftHandledRef.current = false;
     };
 
     socket.on("room:participant-joined", onJoined);
@@ -490,6 +492,8 @@ function stopLocalMedia() {
     setView("home");
     setNotice("");
     window.history.replaceState({}, "", "/");
+    hasLeftRef.current = false;
+    partnerLeftHandledRef.current = false;
   }
 
   function performCleanExit() {
@@ -523,8 +527,8 @@ function stopLocalMedia() {
   }
 
   function continueWatchingSolo() {
-    if (partnerLeftHandledRef.current || isCleaningUpRef.current) return;
-    partnerLeftHandledRef.current = true;
+    if (hasLeftRef.current || isCleaningUpRef.current) return;
+    hasLeftRef.current = true;
     setPartnerLeftAlert(false);
     setSoloMode(true);
     socket.emit("room:leave");

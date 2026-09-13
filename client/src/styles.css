@@ -94,6 +94,7 @@ button { cursor: pointer; }
   position: relative; width: 100%; height: 100%; min-height: 0;
   display: flex; align-items: center; justify-content: center;
   border-radius: 14px; border: 1px solid #1e1e24; background: #000; overflow: hidden;
+  transition: padding-right .55s cubic-bezier(.32,.72,0,1), border-radius .35s ease;
 }
 .movie-scene:has(.cameras) { padding-right: clamp(230px, 25vw, 334px); }
 .movie-surface {
@@ -182,6 +183,7 @@ button { cursor: pointer; }
   z-index: 4; pointer-events: none;
   display: flex; flex-direction: column; align-items: flex-start; gap: 14px;
   max-height: calc(100% - 20px);
+  animation: cfCamIn .5s cubic-bezier(.32,.72,0,1);
 }
 .cam-chip {
   position: relative; flex: none; width: clamp(200px, 22vw, 300px); aspect-ratio: 16 / 9;
@@ -191,7 +193,8 @@ button { cursor: pointer; }
   box-shadow: 0 8px 28px rgba(0,0,0,.55);
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   pointer-events: auto;
-  transition: transform .3s cubic-bezier(.25,.9,.32,1.15), box-shadow .3s, opacity .3s;
+  transition: transform .3s cubic-bezier(.25,.9,.32,1.15), box-shadow .3s, opacity .3s,
+              width .55s cubic-bezier(.32,.72,0,1);
   opacity: .92;
 }
 .cam-chip:hover {
@@ -276,11 +279,11 @@ button { cursor: pointer; }
 }
 .movie-scene:fullscreen .cam-chip,
 .movie-scene:-webkit-full-screen .cam-chip {
-  width: clamp(110px, 16vw, 200px);
+  width: clamp(220px, 24vw, 360px);
 }
 .movie-scene:fullscreen:has(.cameras),
 .movie-scene:-webkit-full-screen:has(.cameras) {
-  padding-right: clamp(140px, 18vw, 224px);
+  padding-right: clamp(250px, 27vw, 404px);
 }
 .movie-scene:fullscreen .control-bar,
 .movie-scene:-webkit-full-screen .control-bar {
@@ -386,6 +389,10 @@ button { cursor: pointer; }
 @keyframes cfPop {
   from { opacity: 0; transform: scale(.92) translateY(14px); }
   to { opacity: 1; transform: none; }
+}
+@keyframes cfCamIn {
+  from { opacity: 0; transform: translateY(calc(-50% + 16px)) scale(.96); }
+  to { opacity: 1; transform: translateY(-50%) scale(1); }
 }
 
 /* ───────── SALMA cinematic experience (intro, time capsule) ───────── */
