@@ -4,6 +4,62 @@ const DRIFT_SEEK_MS = 1000;        // reseek only when |drift| above this
 const DRIFT_HEARTBEAT_MS = 1500;
 const HEARTBEAT_MS = 8000;
 
+/* ── cinematic SVG icon set ── */
+function IconPlay({ w = 18, h = 18 }) {
+  return (
+    <svg width={w} height={h} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M6 4.5v15a1 1 0 0 0 1.55.84l12-7.5a1 1 0 0 0 0-1.68l-12-7.5A1 1 0 0 0 6 4.5z" />
+    </svg>
+  );
+}
+function IconPause({ w = 18, h = 18 }) {
+  return (
+    <svg width={w} height={h} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <rect x="6" y="5" width="4" height="14" rx="1.2" />
+      <rect x="14" y="5" width="4" height="14" rx="1.2" />
+    </svg>
+  );
+}
+function IconVol({ w = 18, h = 18 }) {
+  return (
+    <svg width={w} height={h} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M11 5 6.5 9H3v6h3.5L11 19V5z" fill="currentColor" stroke="none" />
+      <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+      <path d="M18.5 6a9 9 0 0 1 0 12" />
+    </svg>
+  );
+}
+function IconMute({ w = 18, h = 18 }) {
+  return (
+    <svg width={w} height={h} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M11 5 6.5 9H3v6h3.5L11 19V5z" fill="currentColor" stroke="none" />
+      <path d="M17 9l6 6M23 9l-6 6" />
+    </svg>
+  );
+}
+function IconReload({ w = 18, h = 18 }) {
+  return (
+    <svg width={w} height={h} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <path d="M21 3v6h-6" />
+    </svg>
+  );
+}
+function IconFullscreen({ w = 18, h = 18 }) {
+  return (
+    <svg width={w} height={h} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+function IconExclaim({ w = 24, h = 24 }) {
+  return (
+    <svg width={w} height={h} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2 1 21h22L12 2zm0 6c.55 0 1 .45.95 1l-.6 6a.85.85 0 0 1-1.7 0l-.6-6A.95.95 0 0 1 12 8zm0 11.5a1.6 1.6 0 1 1 0-3.2 1.6 1.6 0 0 1 0 3.2z" />
+    </svg>
+  );
+}
+
 function parseYouTubeId(url) {
   const m = String(url || "").match(
     /(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch\?.*v=|embed\/|shorts\/|v\/))([\w-]{11})/
@@ -363,15 +419,15 @@ const MoviePlayer = forwardRef(function MoviePlayer(
       <div className="cf-controls">
         {ytError && (
           <div className="cf-error">
-            <div className="cf-error-icon">⛔</div>
+            <div className="cf-error-icon"><IconExclaim /></div>
             <p>This video can&apos;t be played in CALLFLIX.</p>
             <small>The uploader has disabled embedding. Try another link.</small>
           </div>
         )}
 
         {!playing && !ytError && mediaReady && (
-          <button className="cf-play-big" onClick={togglePlay} title="Play">
-            <span>▶</span>
+          <button className="cf-play-big" onClick={togglePlay} title="Play" aria-label="Play">
+            <IconPlay w={26} h={26} />
           </button>
         )}
 
@@ -388,15 +444,15 @@ const MoviePlayer = forwardRef(function MoviePlayer(
             aria-label="Seek"
           />
           <div className="cf-bar-row">
-            <button className="cf-btn" onClick={togglePlay} title={playing ? "Pause" : "Play"}>
-              {playing ? "⏸" : "▶"}
+            <button className="cf-btn" onClick={togglePlay} title={playing ? "Pause" : "Play"} aria-label={playing ? "Pause" : "Play"}>
+              {playing ? <IconPause /> : <IconPlay />}
             </button>
-            <button className="cf-btn cf-step" onClick={() => seekBy(-10)} title="Back 10 seconds">−10</button>
-            <button className="cf-btn cf-step" onClick={() => seekBy(10)} title="Forward 10 seconds">+10</button>
+            <button className="cf-btn cf-step" onClick={() => seekBy(-10)} title="Back 10 seconds" aria-label="Back 10 seconds">−10</button>
+            <button className="cf-btn cf-step" onClick={() => seekBy(10)} title="Forward 10 seconds" aria-label="Forward 10 seconds">+10</button>
             <span className="cf-time">{fmt(prog.cur)} / {fmt(prog.dur)}</span>
             <span className="cf-spacer" />
-            <button className="cf-btn" onClick={toggleMute} title="Mute / unmute">
-              {muted || volume === 0 ? "🔇" : "🔊"}
+            <button className="cf-btn" onClick={toggleMute} title="Mute / unmute" aria-label="Mute or unmute">
+              {muted || volume === 0 ? <IconMute /> : <IconVol />}
             </button>
             <input
               type="range"
@@ -412,8 +468,9 @@ const MoviePlayer = forwardRef(function MoviePlayer(
               className="cf-btn"
               onClick={reloadVideo}
               title="Reload video (fixes a frozen black frame)"
-            >⟳</button>
-            <button className="cf-btn" onClick={onToggleFullscreen} title="Fullscreen">⛶</button>
+              aria-label="Reload video"
+            ><IconReload /></button>
+            <button className="cf-btn" onClick={onToggleFullscreen} title="Fullscreen" aria-label="Toggle fullscreen"><IconFullscreen /></button>
           </div>
         </div>
       </div>

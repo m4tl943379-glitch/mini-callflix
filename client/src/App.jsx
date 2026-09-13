@@ -2,6 +2,66 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { io } from "socket.io-client";
 import MoviePlayer from "./MoviePlayer";
 
+/* ── cinematic SVG control icons ── */
+const icCommon = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round" };
+function IconCam({ w = 18, h = 18 }) {
+  return (
+    <svg width={w} height={h} viewBox="0 0 24 24" {...icCommon} aria-hidden="true">
+      <path d="M3 7h11a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z" />
+      <path d="m16 10 4.2-2.6a1 1 0 0 1 1.55.83V15.8a1 1 0 0 1-1.55.83L16 14" />
+    </svg>
+  );
+}
+function IconCamOff({ w = 18, h = 18 }) {
+  return (
+    <svg width={w} height={h} viewBox="0 0 24 24" {...icCommon} aria-hidden="true">
+      <path d="M3 7h11a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z" />
+      <path d="m16 10 4.2-2.6a1 1 0 0 1 1.55.83V15.8a1 1 0 0 1-1.55.83L16 14" />
+      <path d="m3 3 18 18" />
+    </svg>
+  );
+}
+function IconMic({ w = 18, h = 18 }) {
+  return (
+    <svg width={w} height={h} viewBox="0 0 24 24" {...icCommon} aria-hidden="true">
+      <rect x="9" y="3" width="6" height="12" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0" />
+      <path d="M12 18v3" />
+    </svg>
+  );
+}
+function IconMicOff({ w = 18, h = 18 }) {
+  return (
+    <svg width={w} height={h} viewBox="0 0 24 24" {...icCommon} aria-hidden="true">
+      <rect x="9" y="3" width="6" height="12" rx="3" />
+      <path d="M5 11a7 7 0 0 0 10.9 5.9" />
+      <path d="M12 18v3" />
+      <path d="m3 3 18 18" />
+    </svg>
+  );
+}
+function IconChat({ w = 18, h = 18 }) {
+  return (
+    <svg width={w} height={h} viewBox="0 0 24 24" {...icCommon} aria-hidden="true">
+      <path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+function IconFullscreen({ w = 18, h = 18 }) {
+  return (
+    <svg width={w} height={h} viewBox="0 0 24 24" {...icCommon} strokeWidth="2" aria-hidden="true">
+      <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+function IconShrink({ w = 18, h = 18 }) {
+  return (
+    <svg width={w} height={h} viewBox="0 0 24 24" {...icCommon} strokeWidth="2" aria-hidden="true">
+      <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3" />
+    </svg>
+  );
+}
+
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
 const MOVIE_SRC = `${SERVER_URL}/movie/movie.mp4`;
 const socket = io(SERVER_URL, { autoConnect: true });
@@ -803,7 +863,7 @@ setRoomId("");
             onClick={() => setSidebarOpen((o) => !o)}
             title="Toggle chat panel"
           >
-            💬 <span>Chat</span>
+            <IconChat /> <span>Chat</span>
           </button>
           <button className="leave" onClick={soloMode ? backToHome : leaveRoom}>
             {soloMode ? "Exit" : "Leave"}
@@ -865,8 +925,8 @@ setRoomId("");
             <div className="control-bar">
               {!soloMode && (
                 <>
-                  <button onClick={toggleCamera} title="Toggle camera">{media.cameraEnabled ? "🎥" : "🚫"}</button>
-                  <button onClick={toggleMic} title="Toggle microphone">{media.micEnabled ? "🎤" : "🔇"}</button>
+                  <button onClick={toggleCamera} title="Toggle camera" aria-label="Toggle camera">{media.cameraEnabled ? <IconCam /> : <IconCamOff />}</button>
+                  <button onClick={toggleMic} title="Toggle microphone" aria-label="Toggle microphone">{media.micEnabled ? <IconMic /> : <IconMicOff />}</button>
                   <span className="bar-sep" />
                 </>
               )}
@@ -920,7 +980,7 @@ setRoomId("");
                   </div>
                 </>
               )}
-              <button onClick={toggleFullscreen} title="Fullscreen">{isFullscreen ? "⤢" : "⛶"}</button>
+              <button onClick={toggleFullscreen} title="Fullscreen" aria-label="Toggle fullscreen">{isFullscreen ? <IconShrink /> : <IconFullscreen />}</button>
             </div>
 
             {floatingReaction && <div className="reaction-float" key={floatingReaction.id}>{floatingReaction.reaction}</div>}
@@ -956,8 +1016,8 @@ setRoomId("");
                   )}
                   <span className="cam-name">{name || "You"} · {media.micEnabled ? "Mic on" : "Muted"}</span>
                   <div className="cam-actions">
-                    <button title="Toggle camera" onClick={toggleCamera}>{media.cameraEnabled ? "🎥" : "🚫"}</button>
-                    <button title="Toggle microphone" onClick={toggleMic}>{media.micEnabled ? "🎤" : "🔇"}</button>
+                    <button title="Toggle camera" onClick={toggleCamera} aria-label="Toggle camera">{media.cameraEnabled ? <IconCam /> : <IconCamOff />}</button>
+                    <button title="Toggle microphone" onClick={toggleMic} aria-label="Toggle microphone">{media.micEnabled ? <IconMic /> : <IconMicOff />}</button>
                   </div>
                 </div>
 
