@@ -886,9 +886,10 @@ setRoomId("");
         {sidebarOpen && (
           <aside className="sidebar">
             {!soloMode && (
-              <div className="status">
-                <span className={`dot ${roomState?.count === 2 ? "online" : ""}`} />
-                {roomState?.count === 2 ? "Both connected" : "Waiting for your friend..."}
+              <div className="invite-box">
+                <span className="eyebrow">PRIVATE ROOM</span>
+                <strong>{roomState?.count || 1}/2 participants</strong>
+                <small>{roomState?.count === 2 ? "Room is ready" : "Waiting for your friend..."}</small>
               </div>
             )}
 
