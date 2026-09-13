@@ -192,7 +192,12 @@ function App() {
 
     const onFeeling = ({ value, user }) => {
       clearTimeout(feelToastTimer.current);
-      setFeelToast({ id: Date.now(), text: feelingDisplay(value), user });
+      setFeelToast({
+        id: Date.now(),
+        text: feelingDisplay(value),
+        user,
+        special: ["could_be_us", "i_wanna_do_this_with_you", "this_is_us"].includes(value)
+      });
       feelToastTimer.current = setTimeout(() => setFeelToast(null), 3200);
     };
 
@@ -920,7 +925,13 @@ setRoomId("");
 
             {floatingReaction && <div className="reaction-float" key={floatingReaction.id}>{floatingReaction.reaction}</div>}
               {feelToast && (
-                <div className="feel-toast" key={feelToast.id}>{feelToast.user}: {feelToast.text}</div>
+                <div className="feel-toast" key={feelToast.id}>
+                  <span className="feel-toast-avatar">{String(feelToast.user || "?").slice(0, 1).toUpperCase()}</span>
+                  <span className="feel-toast-body">
+                    <span className="feel-toast-name">{feelToast.user}</span>
+                    <span className={`feel-toast-text${feelToast.special ? " special" : ""}`}>{feelToast.text}</span>
+                  </span>
+                </div>
               )}
           </div>
         </section>
