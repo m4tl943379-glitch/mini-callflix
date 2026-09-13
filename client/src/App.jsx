@@ -668,7 +668,19 @@ setRoomId("");
       <main className="landing">
         <div className="ambient" />
         <section className="card setup-card">
-          <div className="brand small">CALL<span>FLIX</span></div>
+<div className="brand small">
+          <svg className="brand-logo" width="30" height="30" viewBox="0 0 24 24" aria-hidden="true">
+            <defs>
+              <linearGradient id="cfglg" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stopColor="#ff2431" />
+                <stop offset="1" stopColor="#a30a14" />
+              </linearGradient>
+            </defs>
+            <rect x="1" y="1" width="22" height="22" rx="7" fill="url(#cfglg)" />
+            <path d="M10 7.6 17 12l-7 4.4z" fill="#fff" />
+          </svg>
+          CALL<span>FLIX</span>
+        </div>
           <h2>{joining ? "Join CALLFLIX" : "Create your room"}</h2>
           <p>{joining ? "Enter the room link or ID your friend sent you." : "Create a private room and invite one person."}</p>
 
@@ -716,7 +728,19 @@ setRoomId("");
   return (
     <main ref={pageRef} className={`room-page ${sidebarOpen ? "" : "chat-closed"}`}>
       <header className="topbar">
-        <div className="brand small">CALL<span>FLIX</span></div>
+        <div className="brand small">
+          <svg className="brand-logo" width="30" height="30" viewBox="0 0 24 24" aria-hidden="true">
+            <defs>
+              <linearGradient id="cfglg2" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stopColor="#ff2431" />
+                <stop offset="1" stopColor="#a30a14" />
+              </linearGradient>
+            </defs>
+            <rect x="1" y="1" width="22" height="22" rx="7" fill="url(#cfglg2)" />
+            <path d="M10 7.6 17 12l-7 4.4z" fill="#fff" />
+          </svg>
+          CALL<span>FLIX</span>
+        </div>
         {!soloMode && <div className="room-pill">ROOM <strong>{roomId}</strong></div>}
         <div className="topbar-actions">
           {iceInfo && !soloMode && (
