@@ -15,7 +15,8 @@ button { cursor: pointer; }
 .ambient  { position: absolute; inset: 0; background: radial-gradient(circle at 50% 35%, rgba(180,20,35,.22), transparent 38%), radial-gradient(circle at 80% 90%, rgba(120,20,30,.12), transparent 30%); pointer-events: none; }
 .hero     { max-width: 900px; text-align: center; position: relative; z-index: 1; }
 .brand    { font-weight: 900; letter-spacing: -.06em; font-size: 54px; display: inline-flex; align-items: center; gap: 12px; }
-.brand span { color: #e50914; }
+.brand-word { white-space: nowrap; }
+.brand em { color: #e50914; font-style: normal; }
 .brand.small { font-size: 32px; }
 .brand-logo { flex-shrink: 0; filter: drop-shadow(0 3px 10px rgba(229,9,20,.45)); }
 .eyebrow  { font-size: 11px; letter-spacing: .18em; color: #a7a7ad; font-weight: 800; }
@@ -75,7 +76,8 @@ button { cursor: pointer; }
 .room-pill strong { color: #eee; }
 .chat-toggle {
   background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.1);
-  color: #aaa; padding: 8px 14px; border-radius: 10px; transition: .2s;
+  color: #aaa; padding: 11px 20px; border-radius: 10px; transition: .2s;
+  font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; gap: 7px;
 }
 .chat-toggle:hover { background: rgba(255,255,255,.12); }
 .chat-toggle.active { background: rgba(229,9,20,.18); border-color: rgba(229,9,20,.4); color: #e50914; }
@@ -286,6 +288,10 @@ button { cursor: pointer; }
 .room-page:-webkit-full-screen .topbar { display: none; }
 .room-page:fullscreen .sidebar .invite-box,
 .room-page:-webkit-full-screen .sidebar .invite-box { display: none; }
+.room-page:fullscreen .chat-icon-btn,
+.room-page:-webkit-full-screen .chat-icon-btn { top: auto; bottom: 10px; transform: translateX(-50%); }
+.room-page:fullscreen .chat-panel.closed,
+.room-page:-webkit-full-screen .chat-panel.closed { transform: translateY(16px); }
 .room-page:fullscreen,
 .room-page:-webkit-full-screen {
   padding: 8px;
