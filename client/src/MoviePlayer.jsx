@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useImperativeHandle, useRef, useState, f
 const DRIFT_SEEK_MS = 1000;        // reseek only when |drift| above this
 const DRIFT_HEARTBEAT_MS = 1500;
 const HEARTBEAT_MS = 8000;
+const AUTO_HIDE_MS = 2600;
 
 /* ── cinematic SVG icon set ── */
 function IconPlay({ w = 18, h = 18 }) {
@@ -105,6 +106,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   const soloRef = useRef(solo);
   const seekTimer = useRef(null);
   const clickTimer = useRef(null);
+  const hideTimerRef = useRef(null);
 
   const [ytReady, setYtReady] = useState(false);
   const [ytError, setYtError] = useState(false);
@@ -114,6 +116,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   const [volume, setVolume] = useState(100);
   const [muted, setMuted] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [controlsVisible, setControlsVisible] = useState(true);
 
   useEffect(() => { playingRef.current = playing; }, [playing]);
   useEffect(() => { volumeRef.current = volume; }, [volume]);
@@ -327,6 +330,27 @@ const MoviePlayer = forwardRef(function MoviePlayer(
     emitAction("seek", next);
   }
 
+  /* ── cinematic auto-hide: show on any interaction, hide after idle while playing ── */
+  const showControls = useCallback(() => {
+    setControlsVisible(true);
+    clearTimeout(hideTimerRef.current);
+    if (playingRef.current) {
+      hideTimerRef.current = setTimeout(() => setControlsVisible(false), AUTO_HIDE_MS);
+    }
+  }, []);
+
+  /* Keep controls when paused; when playing resumes, restart the auto-hide timer. */
+  useEffect(() => {
+    setControlsVisible(true);
+    clearTimeout(hideTimerRef.current);
+    if (playingRef.current) {
+      hideTimerRef.current = setTimeout(() => setControlsVisible(false), AUTO_HIDE_MS);
+    }
+    return () => clearTimeout(hideTimerRef.current);
+  }, [playing]);
+
+  useEffect(() => () => clearTimeout(hideTimerRef.current), []);
+
   function onSeekInput(value) {
     const t = Number(value);
     setProg((p) => ({ ...p, cur: t }));
@@ -385,6 +409,8 @@ const MoviePlayer = forwardRef(function MoviePlayer(
           className="movie cf-movie"
           ref={ytContainerRef}
           onClick={onStageClick}
+          onPointerMove={showControls}
+          onPointerDown={showControls}
         />
       ) : (
         <video
@@ -394,6 +420,8 @@ const MoviePlayer = forwardRef(function MoviePlayer(
           src={url}
           playsInline
           onClick={onStageClick}
+          onPointerMove={showControls}
+          onPointerDown={showControls}
           onLoadedMetadata={(e) => {
             const v = e.target;
             if (v.videoWidth && v.videoHeight) setVideoRatio(v.videoWidth / v.videoHeight);
@@ -416,7 +444,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
         />
       )}
 
-      <div className="cf-controls">
+      <div className={`cf-controls${controlsVisible ? "" : " hidden"}`} onPointerMove={showControls} onPointerDown={showControls}>
         {ytError && (
           <div className="cf-error">
             <div className="cf-error-icon"><IconExclaim /></div>
