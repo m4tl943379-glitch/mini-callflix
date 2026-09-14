@@ -68,7 +68,7 @@ const socket = io(SERVER_URL, { autoConnect: true });
 
 const ICE_SERVERS = [
   { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun.cloudflare.com:3478", "stun:openrelay.metered.ca:80"] },
-  { urls: ["turn:openrelay.metered.ca:80?transport=udp", "turn:openrelay.metered.ca:80?transport=tcp"], username: "openrelayproject", credential: "openrelayproject" },
+  { urls: ["turn:openrelay.metered.ca:80?transport=udp", "turn:openrelay.metered.ca:80?transport=tcp", "turn:openrelay.metered.ca:443?transport=tcp"], username: "openrelayproject", credential: "openrelayproject" },
   { urls: "turns:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }
 ];
 const CUSTOM_TURN_URLS = (import.meta.env.VITE_TURN_URLS || "").split(",").filter(Boolean);
@@ -190,6 +190,7 @@ function App() {
   const feelToastTimer = useRef(null);
   const feelCloseTimer = useRef(null);
   const feelSentTimer = useRef(null);
+  const iceWatchdogRef = useRef(null);
   const chatOpenRef = useRef(true);
   const sidebarOpenRef = useRef(true);
   const roleRef = useRef("");
@@ -488,8 +489,34 @@ function App() {
         clearTimeout(reconnectTimer.current);
         reconnectTimer.current = setTimeout(tryRenegotiate, 1200);
       }
-      if (s === "closed") setIceInfo("");
+      if (s === "closed") {
+        setIceInfo("");
+        clearInterval(iceWatchdogRef.current);
+      }
     };
+    pc.oniceconnectionstatechange = () => {
+      const s = pc.iceConnectionState;
+      if (s === "connected" || s === "completed") {
+        clearInterval(iceWatchdogRef.current);
+      }
+      if (s === "failed") setIceInfo("Retrying...");
+    };
+
+    // Stuck-ICE watchdog: different NATs sometimes leave ICE in "connecting"
+    // forever. Retry (iceRestart) periodically instead of hanging silently.
+    clearInterval(iceWatchdogRef.current);
+    const ownPc = pc;
+    iceWatchdogRef.current = setInterval(() => {
+      if (!peer.current || peer.current !== ownPc) { clearInterval(iceWatchdogRef.current); return; }
+      const st = ownPc.connectionState;
+      const ice = ownPc.iceConnectionState;
+      if (st === "connected" || st === "closed" || st === "failed") { clearInterval(iceWatchdogRef.current); return; }
+      if (ice === "connected" || ice === "completed") { clearInterval(iceWatchdogRef.current); return; }
+      if (role === "host" && Date.now() - lastRestart.current > 6000) {
+        setIceInfo("Connecting... (retrying)");
+        tryRenegotiate();
+      }
+    }, 22000);
 
     if (isOfferer) {
       const offer = await pc.createOffer();
