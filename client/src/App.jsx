@@ -128,34 +128,6 @@ function feelingDisplay(value) {
   }
 }
 
-/* Gentle two-note "pop" for incoming chat (WebAudio, no asset needed). */
-let chatAudioCtx = null;
-function primeAudio() {
-  try {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    if (!chatAudioCtx) chatAudioCtx = new AC();
-    if (chatAudioCtx.state === "suspended") chatAudioCtx.resume();
-  } catch {}
-}
-function playMessageSound() {
-  primeAudio();
-  try {
-    const t = chatAudioCtx.currentTime;
-    const osc = chatAudioCtx.createOscillator();
-    const gain = chatAudioCtx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(880, t);
-    osc.frequency.exponentialRampToValueAtTime(1318.5, t + 0.11);
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.14, t + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
-    osc.connect(gain).connect(chatAudioCtx.destination);
-    osc.start(t);
-    osc.stop(t + 0.32);
-  } catch {}
-}
-
 function App() {
   const [view, setView] = useState("home");
   const [name, setName] = useState("");
@@ -260,16 +232,11 @@ function App() {
         el.play().catch(() => {});
       }
     };
-    const primeAudio = () => playMessageSound();
     document.addEventListener("pointerdown", restoreRemoteAudio);
-    document.addEventListener("pointerdown", primeAudio);
     document.addEventListener("keydown", restoreRemoteAudio);
-    document.addEventListener("keydown", primeAudio);
     return () => {
       document.removeEventListener("pointerdown", restoreRemoteAudio);
-      document.removeEventListener("pointerdown", primeAudio);
       document.removeEventListener("keydown", restoreRemoteAudio);
-      document.removeEventListener("keydown", primeAudio);
     };
   }, []);
 
@@ -321,7 +288,6 @@ function App() {
       setMessages((prev) => [...prev, item]);
       const fromOther = item.role && roleRef.current && item.role !== roleRef.current;
       if (!fromOther) return;
-      playMessageSound();
       if (!(sidebarOpenRef.current && chatOpenRef.current)) setUnreadMsgs((n) => n + 1);
     };
 
