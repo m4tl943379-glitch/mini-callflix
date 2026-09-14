@@ -208,6 +208,24 @@ function App() {
     return () => socket.off("connect", onConnect);
   }, []);
 
+  // Autoplay policies block remote video with sound until a user gesture.
+  // If the muted fallback kicked in, restore the call audio on first interaction.
+  useEffect(() => {
+    const restoreRemoteAudio = () => {
+      const el = remoteVideo.current;
+      if (el && el.muted && remoteStreamRef.current) {
+        el.muted = false;
+        el.play().catch(() => {});
+      }
+    };
+    document.addEventListener("pointerdown", restoreRemoteAudio);
+    document.addEventListener("keydown", restoreRemoteAudio);
+    return () => {
+      document.removeEventListener("pointerdown", restoreRemoteAudio);
+      document.removeEventListener("keydown", restoreRemoteAudio);
+    };
+  }, []);
+
   useEffect(() => {
     const onJoined = ({ participant, state }) => {
       setRoomState(state);
@@ -384,7 +402,15 @@ function App() {
     stream?.getTracks().forEach((track) => pc.addTrack(track, stream));
     pc.ontrack = (event) => {
       remoteStreamRef.current = event.streams[0];
-      if (remoteVideo.current) remoteVideo.current.srcObject = event.streams[0];
+      const el = remoteVideo.current;
+      if (el) {
+        el.srcObject = event.streams[0];
+        const tryPlay = (mute) => {
+          el.muted = mute;
+          el.play().catch(() => { if (!mute) tryPlay(true); });
+        };
+        tryPlay(false);
+      }
     };
     pc.onicecandidate = (event) => {
       if (event.candidate) socket.emit("webrtc:ice", { roomId, candidate: event.candidate });
@@ -923,7 +949,7 @@ setRoomId("");
             </div>
 
             <div className="control-bar">
-              {!soloMode && (
+              {!soloMode && !partnerLeftAlert && (
                 <>
                   <button onClick={toggleCamera} title="Toggle camera" aria-label="Toggle camera">{media.cameraEnabled ? <IconCam /> : <IconCamOff />}</button>
                   <button onClick={toggleMic} title="Toggle microphone" aria-label="Toggle microphone">{media.micEnabled ? <IconMic /> : <IconMicOff />}</button>
