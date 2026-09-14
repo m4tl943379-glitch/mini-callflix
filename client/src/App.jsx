@@ -123,6 +123,34 @@ function feelingDisplay(value) {
   }
 }
 
+/* Gentle two-note "pop" for incoming chat (WebAudio, no asset needed). */
+let chatAudioCtx = null;
+function primeAudio() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!chatAudioCtx) chatAudioCtx = new AC();
+    if (chatAudioCtx.state === "suspended") chatAudioCtx.resume();
+  } catch {}
+}
+function playMessageSound() {
+  primeAudio();
+  try {
+    const t = chatAudioCtx.currentTime;
+    const osc = chatAudioCtx.createOscillator();
+    const gain = chatAudioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, t);
+    osc.frequency.exponentialRampToValueAtTime(1318.5, t + 0.11);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.14, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    osc.connect(gain).connect(chatAudioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.32);
+  } catch {}
+}
+
 function App() {
   const [view, setView] = useState("home");
   const [name, setName] = useState("");
@@ -158,9 +186,13 @@ function App() {
   const [feelToast, setFeelToast] = useState(null);
   const [feelSent, setFeelSent] = useState(false);
   const [feelClosing, setFeelClosing] = useState(false);
+  const [unreadMsgs, setUnreadMsgs] = useState(0);
   const feelToastTimer = useRef(null);
   const feelCloseTimer = useRef(null);
   const feelSentTimer = useRef(null);
+  const chatOpenRef = useRef(true);
+  const sidebarOpenRef = useRef(true);
+  const roleRef = useRef("");
   const hasLeftRef = useRef(false);
   const partnerLeftHandledRef = useRef(false);
   const isCleaningUpRef = useRef(false);
@@ -218,13 +250,27 @@ function App() {
         el.play().catch(() => {});
       }
     };
+    const primeAudio = () => playMessageSound();
     document.addEventListener("pointerdown", restoreRemoteAudio);
+    document.addEventListener("pointerdown", primeAudio);
     document.addEventListener("keydown", restoreRemoteAudio);
+    document.addEventListener("keydown", primeAudio);
     return () => {
       document.removeEventListener("pointerdown", restoreRemoteAudio);
+      document.removeEventListener("pointerdown", primeAudio);
       document.removeEventListener("keydown", restoreRemoteAudio);
+      document.removeEventListener("keydown", primeAudio);
     };
   }, []);
+
+  useEffect(() => { chatOpenRef.current = chatOpen; }, [chatOpen]);
+  useEffect(() => { sidebarOpenRef.current = sidebarOpen; }, [sidebarOpen]);
+  useEffect(() => { roleRef.current = role; }, [role]);
+
+  // Reading the chat clears the unread badge.
+  useEffect(() => {
+    if (sidebarOpen && chatOpen) setUnreadMsgs(0);
+  }, [sidebarOpen, chatOpen]);
 
   useEffect(() => {
     const onJoined = ({ participant, state }) => {
@@ -261,7 +307,13 @@ function App() {
       setNotice(`${remoteRole === "host" ? "Host" : "Guest"} media updated.`);
     };
 
-    const onChat = (item) => setMessages((prev) => [...prev, item]);
+    const onChat = (item) => {
+      setMessages((prev) => [...prev, item]);
+      const fromOther = item.role && roleRef.current && item.role !== roleRef.current;
+      if (!fromOther) return;
+      playMessageSound();
+      if (!(sidebarOpenRef.current && chatOpenRef.current)) setUnreadMsgs((n) => n + 1);
+    };
 
     const onReaction = ({ reaction, id }) => {
       setFloatingReaction({ reaction, id });
@@ -314,6 +366,7 @@ function App() {
       setRoomState(null);
       setPlayback(null);
       setMessages([]);
+      setUnreadMsgs(0);
       setLinkInput("");
       setEditingMovie(false);
       setMovieUrl(MOVIE_SRC);
@@ -611,6 +664,7 @@ function stopLocalMedia() {
   function resetRoomUi() {
     setPlayback(null);
     setMessages([]);
+    setUnreadMsgs(0);
     setLinkInput("");
     setEditingMovie(false);
     setIntroStep("idle");
@@ -890,6 +944,7 @@ setRoomId("");
             title="Toggle chat panel"
           >
             <IconChat /> <span>Chat</span>
+            {unreadMsgs > 0 && <span className="msg-badge">{unreadMsgs > 9 ? "9+" : unreadMsgs}</span>}
           </button>
           <button className="leave" onClick={soloMode ? backToHome : leaveRoom}>
             {soloMode ? "Exit" : "Leave"}
@@ -1064,6 +1119,7 @@ setRoomId("");
                 aria-label="Toggle chat"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
+                {unreadMsgs > 0 && <span className="msg-badge">{unreadMsgs > 9 ? "9+" : unreadMsgs}</span>}
               </button>
 
               <div className={`chat-panel ${chatOpen ? "open" : "closed"}`}>
