@@ -438,10 +438,16 @@ button { cursor: pointer; }
 .room-page:-webkit-full-screen .sidebar .invite-box { display: none; }
 .room-page:fullscreen .chat-icon-btn,
 .room-page:-webkit-full-screen .chat-icon-btn { top: auto; bottom: 10px; transform: translateX(-50%); }
+.room-page:fullscreen .mobile-bar,
+.room-page:-webkit-full-screen .mobile-bar { display: none; }
 .room-page:fullscreen .chat-panel.closed,
 .room-page:-webkit-full-screen .chat-panel.closed { transform: translateY(16px); }
 .room-page:fullscreen,
 .room-page:-webkit-full-screen { padding: 10px; background: #000; }
+@media (max-width: 600px), (orientation: landscape) and (max-height: 450px) and (pointer: coarse) {
+  .room-page:fullscreen .sidebar,
+  .room-page:-webkit-full-screen .sidebar { display: none; }
+}
 
 /* ───────── ROOM — sidebar ───────── */
 .sidebar {
@@ -836,6 +842,12 @@ button { cursor: pointer; }
   100% { opacity: 0; transform: translateX(-50%) translateY(-10px) scale(.97); }
 }
 
+/* ───────── mobile camera overlays (hidden on desktop) ───────── */
+.camera-overlays { display: none; }
+
+/* ───────── mobile bottom bar (hidden on desktop) ───────── */
+.mobile-bar { display: none; }
+
 /* ───────── responsive ───────── */
 @media (min-width: 640px) { .chat-toggle span { display: inline; } }
 @media (min-width: 1600px) { .room-page { padding: 12px; } .room-page .sidebar { width: 350px; } }
@@ -846,31 +858,99 @@ button { cursor: pointer; }
   .sidebar { width: 100%; min-height: 340px; }
   .cam-chip { max-height: 213px; max-width: 375px; }
 }
-@media (max-width: 600px) {
-  .room-page { padding: 10px; gap: 8px; }
-  .topbar { gap: 6px; padding: 4px 0 6px; }
-  .brand.small { font-size: 23px; gap: 8px; }
-  .brand-logo { width: 24px; height: 24px; }
+@media (max-width: 600px), (orientation: landscape) and (max-height: 450px) and (pointer: coarse) {
+  .room-page { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; padding: 6px; gap: 6px; }
+  .topbar { gap: 6px; padding: 2px 2px 4px; }
+  .brand.small { font-size: 21px; gap: 7px; }
+  .brand-logo { width: 22px; height: 22px; }
   .room-pill { display: none; }
   .ice-pill { display: none; }
-  .cam-chip { max-height: 175px; max-width: 300px; }
-  .cam-name { font-size: 10px; padding: 3px 7px; }
-  .control-bar { gap: 2px; padding: 6px 8px; bottom: 92px; }
+  .chat-toggle { display: none; }
+  .inviter { padding: 8px 12px; font-size: 12px; }
+  .leave { padding: 9px 14px; font-size: 12px; }
+
+  /* film-first layout */
+  .workspace { flex: 1; min-height: 0; gap: 6px; }
+  .watch-stage { flex: 1; min-height: 0; }
+  .movie-scene { border-radius: 10px; }
+  .scene-topbar { padding: 12px 12px 26px; }
+  .scene-title { font-size: 14px; }
+  .scene-topbar .meta-actions .compact { padding: 8px 11px; font-size: 12px; }
+
+  /* sidebar becomes a chat bottom sheet */
+  .sidebar {
+    position: fixed; bottom: 0; left: 0; right: 0; top: auto;
+    width: 100%; height: 60vh; max-height: 62vh; min-height: 0;
+    border-radius: 20px 20px 0 0; padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    z-index: 40; gap: 10px;
+    transform: translateY(105%); opacity: 0; pointer-events: none;
+    transition: transform .4s var(--ease), opacity .3s var(--ease);
+    box-shadow: 0 -24px 70px rgba(0, 0, 0, .7);
+  }
+  .sidebar:has(.chat-panel.open) { transform: translateY(0); opacity: 1; pointer-events: auto; }
+  .sidebar .invite-box { display: none; }
+  .sidebar .cameras { display: none; }
+  .chat-area { flex: 1; min-height: 0; }
+  .chat-icon-btn { top: 50%; }
+
+  /* floating cameras over the movie */
+  .camera-overlays { display: block; position: absolute; top: 10px; left: 10px; right: 10px; z-index: 7; pointer-events: none; }
+  .camera-overlays .cam-chip {
+    position: absolute; top: 0; width: 92px; height: 92px;
+    aspect-ratio: auto; max-width: none; max-height: none;
+    border-radius: 50%; opacity: 1; border: 1px solid rgba(255, 255, 255, .2);
+    pointer-events: auto; box-shadow: 0 12px 34px rgba(0, 0, 0, .55);
+  }
+  .camera-overlays .cam-chip:hover { transform: none; }
+  .camera-overlays .overlay-self { left: 0; border-color: rgba(229, 9, 20, .4); }
+  .camera-overlays .overlay-remote { right: 0; border-style: dashed; }
+  .camera-overlays .overlay-remote:has(video) { border-style: solid; }
+  .camera-overlays .cam-name { display: none; }
+  .camera-overlays .cam-actions { display: none; }
+  .camera-overlays .cam-placeholder { border-radius: 50%; font-size: 9px; letter-spacing: .14em; }
+
+  /* sleek bottom bar (cam / mic / chat) */
+  .mobile-bar {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    position: fixed; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%); z-index: 25;
+    padding: 8px 14px; border-radius: var(--r-full);
+    background: rgba(10, 10, 14, .72); border: 1px solid var(--line-soft);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 14px 44px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .06);
+  }
+  .mobile-bar .mob-btn {
+    position: relative; width: 44px; height: 44px; border-radius: 50%;
+    display: grid; place-items: center; padding: 0;
+    background: rgba(255, 255, 255, .06); border: 1px solid var(--line-soft);
+    color: var(--text-2); transition: background var(--m-fast), color var(--m-fast), transform var(--m-fast) var(--ease);
+  }
+  .mobile-bar .mob-btn svg { width: 20px; height: 20px; }
+  .mobile-bar .mob-btn:active { transform: scale(.9); }
+  .mobile-bar .mob-btn.off { color: var(--accent-hi); }
+  .mobile-bar .mob-btn.active { color: #fff; background: var(--accent-soft); border-color: var(--accent-line); }
+  .mobile-bar .msg-badge { position: absolute; top: -3px; right: -3px; }
+
+  /* playback bar lifted above the persistent bottom bar */
+  .cf-player-bar { left: 10px; right: 10px; bottom: 74px; padding: 10px 12px 9px; }
+
+  /* control bar above the bottom bar; cam/mic live in the bottom bar now */
+  .control-bar { gap: 2px; padding: 6px 8px; bottom: 148px; }
   .control-bar button { width: 34px; height: 36px; padding: 0; }
+  .control-bar button[title="Toggle camera"],
+  .control-bar button[title="Toggle microphone"] { display: none; }
   .reactions button { width: 32px; }
   .bar-sep { display: none; }
   .cf-volume { display: none !important; }
   .cf-step { padding: 6px 8px; font-size: 11px; }
   .cf-play-big { width: 60px; height: 60px; }
   .cf-play-big svg { width: 20px; height: 20px; }
-  .scene-topbar { padding: 12px 12px 26px; }
-  .scene-title { font-size: 14px; }
-  .scene-topbar .meta-actions .compact { padding: 8px 11px; font-size: 12px; }
+
   .hero h1 { font-size: 44px; }
   .actions { flex-direction: column; }
   .actions button { width: 100%; }
   .card { padding: 24px 20px; }
-  .feel-panel { position: fixed; left: 50%; right: auto; width: min(272px, calc(100vw - 28px)); bottom: 76px; }
+  .feel-panel { position: fixed; left: 50%; right: auto; width: min(272px, calc(100vw - 28px)); bottom: 152px; }
   .feel-toast { top: 58px; max-width: 82vw; }
   .feel-toast-avatar { width: 26px; height: 26px; font-size: 11px; }
   @keyframes cfPanelInM { from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(.95); } to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }

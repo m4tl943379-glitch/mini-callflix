@@ -63,6 +63,7 @@ function IconShrink({ w = 18, h = 18 }) {
 }
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
+const isMobileViewport = () => window.matchMedia("(max-width: 600px)").matches || (window.matchMedia("(pointer: coarse)").matches && window.innerHeight < 500);
 const MOVIE_SRC = `${SERVER_URL}/movie/movie.mp4`;
 const socket = io(SERVER_URL, { autoConnect: true });
 
@@ -206,6 +207,8 @@ function App() {
 
   const localVideo = useRef(null);
   const remoteVideo = useRef(null);
+  const localVideoOverlay = useRef(null);
+  const remoteVideoOverlay = useRef(null);
   const localStream = useRef(null);
   const peer = useRef(null);
   const pendingCandidates = useRef([]);
@@ -350,6 +353,7 @@ function App() {
       }
       remoteStreamRef.current = null;
       if (remoteVideo.current) remoteVideo.current.srcObject = null;
+      if (remoteVideoOverlay.current) remoteVideoOverlay.current.srcObject = null;
       clearTimeout(reconnectTimer.current);
       connectionLost.current = false;
       setIceInfo("");
@@ -435,6 +439,7 @@ function App() {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       localStream.current = stream;
       if (localVideo.current) localVideo.current.srcObject = stream;
+      if (localVideoOverlay.current) localVideoOverlay.current.srcObject = stream;
       return stream;
     } catch {
       setNotice("Camera/microphone permission was denied. You can continue with media disabled.");
@@ -471,6 +476,7 @@ function App() {
         };
         tryPlay(false);
       }
+      if (remoteVideoOverlay.current) remoteVideoOverlay.current.srcObject = event.streams[0];
     };
     pc.onicecandidate = (event) => {
       if (event.candidate) socket.emit("webrtc:ice", { roomId, candidate: event.candidate });
@@ -729,6 +735,7 @@ function stopLocalMedia() {
     localStream.current?.getTracks().forEach((t) => t.stop());
     localStream.current = null;
     if (localVideo.current) localVideo.current.srcObject = null;
+    if (localVideoOverlay.current) localVideoOverlay.current.srcObject = null;
   }
 
   function closePeerConnection() {
@@ -738,6 +745,7 @@ function stopLocalMedia() {
     }
     remoteStreamRef.current = null;
     if (remoteVideo.current) remoteVideo.current.srcObject = null;
+    if (remoteVideoOverlay.current) remoteVideoOverlay.current.srcObject = null;
     clearTimeout(reconnectTimer.current);
     clearTimeout(earlyCheckRef.current);
     clearInterval(iceWatchdogRef.current);
@@ -837,6 +845,18 @@ setRoomId("");
     chromeTimer.current = setTimeout(() => setChromeVisible(false), 2600);
   }
 
+  function closeChat() {
+    setChatOpen(false);
+  }
+
+  useEffect(() => {
+    if (view === "room" && isMobileViewport()) {
+      setChatOpen(false);
+      setSidebarOpen(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
@@ -861,6 +881,8 @@ setRoomId("");
   useEffect(() => {
     if (localStream.current && localVideo.current) localVideo.current.srcObject = localStream.current;
     if (remoteStreamRef.current && remoteVideo.current) remoteVideo.current.srcObject = remoteStreamRef.current;
+    if (localStream.current && localVideoOverlay.current) localVideoOverlay.current.srcObject = localStream.current;
+    if (remoteStreamRef.current && remoteVideoOverlay.current) remoteVideoOverlay.current.srcObject = remoteStreamRef.current;
   }, [view, roomId, role, media.cameraEnabled]);
 
   async function tryRenegotiate() {
@@ -1163,6 +1185,28 @@ setRoomId("");
               <button onClick={toggleFullscreen} title="Fullscreen" aria-label="Toggle fullscreen">{isFullscreen ? <IconShrink /> : <IconFullscreen />}</button>
             </div>
 
+            {!soloMode && (
+              <div className="camera-overlays">
+                <div className={`cam-chip overlay-self ${media.cameraEnabled ? "" : "cam-off"}`}>
+                  {media.cameraEnabled ? (
+                    <video ref={localVideoOverlay} autoPlay muted playsInline />
+                  ) : (
+                    <div className="cam-placeholder">YOU</div>
+                  )}
+                  <span className="cam-name">You{media.micEnabled ? " · mic" : " · muted"}</span>
+                  <div className="cam-actions">
+                    <button title="Toggle camera" onClick={toggleCamera} aria-label="Toggle camera">{media.cameraEnabled ? <IconCam /> : <IconCamOff />}</button>
+                    <button title="Toggle microphone" onClick={toggleMic} aria-label="Toggle microphone">{media.micEnabled ? <IconMic /> : <IconMicOff />}</button>
+                  </div>
+                </div>
+                <div className="cam-chip overlay-remote">
+                  <video ref={remoteVideoOverlay} autoPlay playsInline />
+                  <span className="cam-name">
+                    {role === "host" ? roomState?.guest?.name || "Waiting..." : roomState?.host?.name || "Host"}
+                  </span>
+                </div>
+              </div>
+            )}
             {floatingReaction && <div className="reaction-float" key={floatingReaction.id}>{floatingReaction.reaction}</div>}
               {feelToast && (
                 <div className="feel-toast" key={feelToast.id}>
@@ -1225,7 +1269,7 @@ setRoomId("");
                 <div className="chat">
                     <div className="chat-title-row">
                       <div className="chat-title">Chat</div>
-                      <button className="chat-close" onClick={() => setChatOpen(false)} title="Collapse chat">✕</button>
+                      <button className="chat-close" onClick={closeChat} title="Collapse chat">✕</button>
                     </div>
                     <div className="messages">
                       {messages.length === 0 && <div className="empty">Say something while you watch ❤️</div>}
@@ -1246,6 +1290,36 @@ setRoomId("");
           </aside>
         )}
       </div>
+
+      {!soloMode && (
+        <div className="mobile-bar">
+          <button
+            className={`mob-btn ${media.cameraEnabled ? "" : "off"}`}
+            onClick={toggleCamera}
+            title="Toggle camera"
+            aria-label="Toggle camera"
+          >
+            {media.cameraEnabled ? <IconCam /> : <IconCamOff />}
+          </button>
+          <button
+            className={`mob-btn ${media.micEnabled ? "" : "off"}`}
+            onClick={toggleMic}
+            title="Toggle microphone"
+            aria-label="Toggle microphone"
+          >
+            {media.micEnabled ? <IconMic /> : <IconMicOff />}
+          </button>
+          <button
+            className={`mob-btn chat ${chatOpen ? "active" : ""}`}
+            onClick={() => { const next = !chatOpen; setChatOpen(next); if (next) setSidebarOpen(true); }}
+            title="Open chat"
+            aria-label="Open chat"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
+            {unreadMsgs > 0 && <span className="msg-badge">{unreadMsgs > 9 ? "9+" : unreadMsgs}</span>}
+          </button>
+        </div>
+      )}
 
       {introOverlay && (
         <div className="intro-overlay">
