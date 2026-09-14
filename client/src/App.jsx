@@ -71,6 +71,10 @@ const ICE_SERVERS = [
   { urls: ["turn:openrelay.metered.ca:80?transport=udp", "turn:openrelay.metered.ca:80?transport=tcp", "turn:openrelay.metered.ca:443?transport=tcp"], username: "openrelayproject", credential: "openrelayproject" },
   { urls: "turns:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }
 ];
+// openrelayproject / openrelayproject above are PUBLIC DEMO credentials
+// belonging to OpenRelay (metered.ca). The real, reliable TURN config is
+// always loaded server-side via GET /api/ice-config (never from source).
+const MAX_ICE_RESTARTS = 6;
 const CUSTOM_TURN_URLS = (import.meta.env.VITE_TURN_URLS || "").split(",").filter(Boolean);
 if (CUSTOM_TURN_URLS.length) {
   ICE_SERVERS.push({
@@ -191,6 +195,8 @@ function App() {
   const feelCloseTimer = useRef(null);
   const feelSentTimer = useRef(null);
   const iceWatchdogRef = useRef(null);
+  const earlyCheckRef = useRef(null);
+  const restartAttempts = useRef(0);
   const chatOpenRef = useRef(true);
   const sidebarOpenRef = useRef(true);
   const roleRef = useRef("");
@@ -472,6 +478,7 @@ function App() {
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
       if (s === "connected") {
+        restartAttempts.current = 0;
         setIceInfo("Connected");
         setTimeout(() => refreshIceInfo(pc), 500);
         if (connectionLost.current) {
@@ -481,25 +488,71 @@ function App() {
         return;
       }
       if (s === "connecting") setIceInfo("Connecting...");
-      if (s === "failed" || s === "disconnected") {
+
+      if (s === "failed") {
         setIceInfo("Retrying...");
         connectionLost.current = true;
-        setNotice("Video connection lost. Trying to reconnect...");
         if (role !== "host") return;
+        if (restartAttempts.current >= MAX_ICE_RESTARTS) {
+          setIceInfo("Connection failed");
+          setNotice("Couldn't connect the video call. Configure a TURN relay for cross-network calls.");
+          return;
+        }
+        setNotice("Video connection lost. Trying to reconnect...");
         clearTimeout(reconnectTimer.current);
-        reconnectTimer.current = setTimeout(tryRenegotiate, 1200);
+        reconnectTimer.current = setTimeout(tryRenegotiate, 1500);
+        return;
       }
+
+      // "disconnected" is often transient — give ICE time to recover before restarting.
+      if (s === "disconnected") {
+        connectionLost.current = true;
+        if (role !== "host") return;
+        if (restartAttempts.current >= MAX_ICE_RESTARTS) return;
+        setIceInfo("Connecting...");
+        setNotice("Video connection lost. Trying to reconnect...");
+        clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = setTimeout(() => {
+          if (peer.current?.connectionState === "disconnected" && restartAttempts.current < MAX_ICE_RESTARTS) {
+            setIceInfo("Retrying...");
+            tryRenegotiate();
+          }
+        }, 5000);
+        return;
+      }
+
       if (s === "closed") {
         setIceInfo("");
         clearInterval(iceWatchdogRef.current);
       }
     };
     pc.oniceconnectionstatechange = () => {
-      const s = pc.iceConnectionState;
-      if (s === "connected" || s === "completed") {
+      if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
         clearInterval(iceWatchdogRef.current);
       }
-      if (s === "failed") setIceInfo("Retrying...");
+      if (pc.iceConnectionState === "failed") {
+        setIceInfo("Retrying...");
+        if (role === "host" && restartAttempts.current < MAX_ICE_RESTARTS) {
+          clearTimeout(reconnectTimer.current);
+          reconnectTimer.current = setTimeout(tryRenegotiate, 1200);
+        }
+      }
+    };
+    // Once candidates finish gathering but no route is established, retry early
+    // instead of waiting for the 22s stuck watchdog.
+    pc.onicegatheringstatechange = () => {
+      if (pc.iceGatheringState !== "complete") return;
+      clearTimeout(earlyCheckRef.current);
+      earlyCheckRef.current = setTimeout(() => {
+        if (!peer.current || peer.current !== pc) return;
+        const st = pc.connectionState;
+        if (st === "connected" || st === "failed" || st === "closed") return;
+        if (restartAttempts.current >= MAX_ICE_RESTARTS) return;
+        if (role === "host" && Date.now() - lastRestart.current > 6000) {
+          setIceInfo("Connecting... (retrying)");
+          tryRenegotiate();
+        }
+      }, 8000);
     };
 
     // Stuck-ICE watchdog: different NATs sometimes leave ICE in "connecting"
@@ -512,6 +565,7 @@ function App() {
       const ice = ownPc.iceConnectionState;
       if (st === "connected" || st === "closed" || st === "failed") { clearInterval(iceWatchdogRef.current); return; }
       if (ice === "connected" || ice === "completed") { clearInterval(iceWatchdogRef.current); return; }
+      if (restartAttempts.current >= MAX_ICE_RESTARTS) { clearInterval(iceWatchdogRef.current); setIceInfo("Connection failed"); return; }
       if (role === "host" && Date.now() - lastRestart.current > 6000) {
         setIceInfo("Connecting... (retrying)");
         tryRenegotiate();
@@ -685,6 +739,9 @@ function stopLocalMedia() {
     remoteStreamRef.current = null;
     if (remoteVideo.current) remoteVideo.current.srcObject = null;
     clearTimeout(reconnectTimer.current);
+    clearTimeout(earlyCheckRef.current);
+    clearInterval(iceWatchdogRef.current);
+    restartAttempts.current = 0;
     connectionLost.current = false;
   }
 
@@ -809,27 +866,42 @@ setRoomId("");
   async function tryRenegotiate() {
     const pc = peer.current;
     if (!pc || pc.connectionState === "connected") return;
+    if (restartAttempts.current >= MAX_ICE_RESTARTS) return;
     if (Date.now() - lastRestart.current < 3000) return;
     lastRestart.current = Date.now();
+    restartAttempts.current += 1;
     try {
       pc.restartIce?.();
       const offer = await pc.createOffer({ iceRestart: true });
       await pc.setLocalDescription(offer);
       socket.emit("webrtc:offer", { roomId, offer });
-    } catch {}
+    } catch {
+      // A failed negotiation shouldn't burn a retry budget.
+      restartAttempts.current = Math.max(0, restartAttempts.current - 1);
+    }
   }
 
   async function refreshIceInfo(pc) {
     try {
       const stats = await pc.getStats();
       let pair = null;
+      let selectedId = null;
       stats.forEach((r) => {
-        if (r.type === "candidate-pair" && r.state === "succeeded" && !pair) pair = r;
+        if (r.type === "candidate-pair") {
+          // Prefer the actual in-use pair (nominated/selected), best priority wins.
+          const inUse = r.state === "succeeded" && (r.nominated === true || r.selected === true);
+          if (inUse && (!pair || (r.priority || 0) > (pair.priority || 0))) pair = r;
+        }
+        if (r.type === "transport") selectedId = r.selectedCandidatePairId || selectedId;
       });
+      if (!pair && selectedId) pair = stats.get(selectedId);
       if (pair) {
         const remote = stats.get(pair.remoteCandidateId);
-        const type = remote?.candidateType || remote?.type;
-        setIceInfo(type === "relay" ? "Relay (TURN)" : "Direct (P2P)");
+        const local = stats.get(pair.localCandidateId);
+        const rType = remote?.candidateType || remote?.type;
+        const lType = local?.candidateType || local?.type;
+        const relayed = rType === "relay" || lType === "relay";
+        setIceInfo(relayed ? "Relay (TURN)" : "Direct (P2P)");
       } else {
         setIceInfo("Connected");
       }
@@ -949,7 +1021,7 @@ setRoomId("");
         <div className="topbar-actions">
           {iceInfo && !soloMode && (
             <div className="ice-pill" title={`Connection: ${iceInfo}`}>
-              <span className={`ice-dot ${/Retrying|Connecting|Waiting/.test(iceInfo) ? "waiting" : "good"}`} />
+              <span className={`ice-dot ${/Retrying|Connecting|Waiting/.test(iceInfo) ? "waiting" : "good"} ${/failed/i.test(iceInfo) ? "bad" : ""}`} />
               {iceInfo}
             </div>
           )}

@@ -89,12 +89,24 @@ function buildIceConfig() {
 
   const turnUrls = (process.env.TURN_URLS || "").split(",").map((s) => s.trim()).filter(Boolean);
   if (turnUrls.length) {
-    iceServers.push({
-      urls: turnUrls,
-      username: process.env.TURN_USERNAME || "",
-      credential: process.env.TURN_CREDENTIAL || ""
-    });
+    if (!process.env.TURN_USERNAME || !process.env.TURN_CREDENTIAL) {
+      for (const url of turnUrls) {
+        const m = /^turns?:\/\/([^:@?]+):([^@?]+)@/.exec(url);
+        if (m) {
+          iceServers.push({ urls: url, username: decodeURIComponent(m[1]), credential: decodeURIComponent(m[2]) });
+          continue;
+        }
+        iceServers.push({ urls: url, username: process.env.TURN_USERNAME || "", credential: process.env.TURN_CREDENTIAL || "" });
+      }
+    } else {
+      iceServers.push({
+        urls: turnUrls,
+        username: process.env.TURN_USERNAME,
+        credential: process.env.TURN_CREDENTIAL
+      });
+    }
   } else {
+    // Public demo fallback (openrelayproject are shared demo creds, not secrets).
     iceServers.push(
       {
         urls: ["turn:openrelay.metered.ca:80?transport=udp", "turn:openrelay.metered.ca:80?transport=tcp", "turn:openrelay.metered.ca:443?transport=tcp"],
@@ -108,8 +120,17 @@ function buildIceConfig() {
 }
 
 app.get("/api/ice-config", (_req, res) => {
+  // Credentials are embedded in this payload — never cache it.
+  res.set("Cache-Control", "no-store");
   res.json({ iceServers: buildIceConfig() });
 });
+
+if (process.env.TURN_URLS) {
+  const count = process.env.TURN_URLS.split(",").filter((s) => s.trim()).length;
+  console.log(`[ice] Using configured TURN servers (${count} URL(s)) from environment (credentials kept server-side).`);
+} else {
+  console.log("[ice] Using built-in demo TURN fallback (openrelay.metered.ca).");
+}
 
 // Video proxy: re-serves a remote mp4 (MOVIE_SOURCE_URL) with video/mp4 MIME
 // and Range support so the browser <video> can play/seek it directly.

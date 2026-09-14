@@ -199,6 +199,7 @@ button { cursor: pointer; }
 }
 .ice-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 10px rgba(62, 207, 110, .55); position: relative; }
 .ice-dot.waiting { background: var(--warn); box-shadow: 0 0 10px rgba(240, 180, 41, .5); animation: icePulse 1.4s ease-in-out infinite; }
+  .ice-dot.bad { background: var(--accent); box-shadow: 0 0 10px rgba(229, 9, 20, .55); animation: icePulse 1.4s ease-in-out infinite; }
 @keyframes icePulse { 0%, 100% { opacity: .45; transform: scale(.9); } 50% { opacity: 1; transform: scale(1); } }
 .room-pill {
   color: var(--faint); background: rgba(255, 255, 255, .035);
