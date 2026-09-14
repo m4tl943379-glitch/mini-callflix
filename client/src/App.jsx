@@ -67,7 +67,7 @@ const MOVIE_SRC = `${SERVER_URL}/movie/movie.mp4`;
 const socket = io(SERVER_URL, { autoConnect: true });
 
 const ICE_SERVERS = [
-  { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun.cloudflare.com:3478", "stun:openrelay.metered.ca:80"] },
+  { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun.cloudflare.com:3478"] },
   { urls: ["turn:openrelay.metered.ca:80?transport=udp", "turn:openrelay.metered.ca:80?transport=tcp", "turn:openrelay.metered.ca:443?transport=tcp"], username: "openrelayproject", credential: "openrelayproject" },
   { urls: "turns:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }
 ];

@@ -83,7 +83,7 @@ function publicState(room) {
 app.get("/health", (_req, res) => res.json({ ok: true, rooms: rooms.size }));
 
 function buildIceConfig() {
-  const stuns = (process.env.STUN_URLS || "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302,stun:stun.cloudflare.com:3478,stun:openrelay.metered.ca:80")
+  const stuns = (process.env.STUN_URLS || "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302,stun:stun.cloudflare.com:3478")
     .split(",").map((s) => s.trim()).filter(Boolean);
   const iceServers = [{ urls: stuns }];
 
