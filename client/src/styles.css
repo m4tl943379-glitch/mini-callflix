@@ -408,6 +408,9 @@ button { cursor: pointer; }
 .chrome-hidden .cf-player-bar { opacity: 0; transform: translateY(12px); }
 .cf-controls.hidden .cf-play-big,
 .chrome-hidden .cf-play-big { opacity: 0; transform: translate(-50%, -50%) scale(.96); }
+/* The floating Camera/Mic/Reactions/Feeling toolbar shares the SAME visibility
+   state as the movie controls (MoviePlayer controlsVisible ↔ App bumpChrome). */
+.movie-scene:has(.cf-controls.hidden) .control-bar { opacity: 0; visibility: hidden; transform: translate(-50%, 8px); pointer-events: none; }
 
 /* ───────── ROOM — scene topbar (title / link / start) ───────── */
 .scene-topbar {

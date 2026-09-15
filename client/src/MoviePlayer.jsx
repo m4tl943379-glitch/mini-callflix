@@ -351,6 +351,21 @@ const MoviePlayer = forwardRef(function MoviePlayer(
 
   useEffect(() => () => clearTimeout(hideTimerRef.current), []);
 
+  /* Any pointer activity anywhere over the scene (movie, player bar AND the
+     floating Camera/Mic/Reactions toolbar) shares the SAME visibility state,
+     so the two layers never desync. */
+  useEffect(() => {
+    const onPointerActivity = (e) => {
+      if (e.target && e.target.closest && e.target.closest(".movie-scene")) showControls();
+    };
+    document.addEventListener("pointermove", onPointerActivity, true);
+    document.addEventListener("pointerdown", onPointerActivity, true);
+    return () => {
+      document.removeEventListener("pointermove", onPointerActivity, true);
+      document.removeEventListener("pointerdown", onPointerActivity, true);
+    };
+  }, [showControls]);
+
   function onSeekInput(value) {
     const t = Number(value);
     setProg((p) => ({ ...p, cur: t }));
