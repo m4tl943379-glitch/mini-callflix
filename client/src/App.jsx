@@ -151,6 +151,7 @@ function App() {
   const [chatOpen, setChatOpen] = useState(true);
   const [introOverlay, setIntroOverlay] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [camSide, setCamSide] = useState("right"); // fullscreen 80/20: "right" | "left"
   const [chromeVisible, setChromeVisible] = useState(true);
   const [copyStatus, setCopyStatus] = useState("");
   const [iceInfo, setIceInfo] = useState("");
@@ -187,6 +188,9 @@ function App() {
   const playerRef = useRef(null);
   const pageRef = useRef(null);
   const stageRef = useRef(null);
+  const workspaceRef = useRef(null);
+  const camSideRef = useRef("right");
+  const camDragRef = useRef(null); // { pointerId, startX, fromLeft, moved } for fullscreen pair drag
   const chromeTimer = useRef(null);
   const remoteStreamRef = useRef(null);
   const reconnectTimer = useRef(null);
@@ -839,7 +843,24 @@ setRoomId("");
   }, [roomId, view, editingMovie]);
 
   useEffect(() => {
-    const onFs = () => setIsFullscreen(!!document.fullscreenElement);
+    const onFs = () => {
+      const fs = !!document.fullscreenElement;
+      setIsFullscreen(fs);
+      if (fs) {
+        setSidebarOpen(true);
+      } else {
+        setCamSide("right");
+        camSideRef.current = "right";
+        camDragRef.current = null;
+        const ws = workspaceRef.current;
+        if (ws) {
+          const st = ws.querySelector(".watch-stage");
+          const sb = ws.querySelector(".sidebar");
+          if (st) { st.style.removeProperty("transition"); st.style.removeProperty("transform"); }
+          if (sb) { sb.style.removeProperty("transition"); sb.style.removeProperty("transform"); }
+        }
+      }
+    };
     document.addEventListener("fullscreenchange", onFs);
     return () => document.removeEventListener("fullscreenchange", onFs);
   }, []);
@@ -907,6 +928,60 @@ setRoomId("");
       el.requestFullscreen?.().catch(() => {});
     }
   }
+
+  useEffect(() => { camSideRef.current = camSide; }, [camSide]);
+
+  /* Fullscreen 80/20 camera-pair drag: the pair is a LOCKED group; dragging it
+     horizontally only switches the dedicated camera zone between RIGHT and LEFT
+     (movie stays 80%, cameras stay 20%, no free positioning). */
+  function handleCamPointerDown(e) {
+    if (!isFullscreen) return;
+    if (typeof e.button === "number" && e.button !== 0) return;
+    if (e.target && e.target.closest && e.target.closest("button")) return;
+    const ws = workspaceRef.current;
+    if (!ws) return;
+    camDragRef.current = { pointerId: e.pointerId, startX: e.clientX, fromLeft: camSideRef.current === "left", W: ws.clientWidth };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  }
+
+  function handleCamPointerMove(e) {
+    const d = camDragRef.current;
+    if (!d) return;
+    const W = d.W || 1;
+    const base = d.fromLeft ? -0.8 * W : 0;
+    const camX = Math.max(-0.8 * W, Math.min(0, base + (e.clientX - d.startX)));
+    const movieX = -camX / 4;
+    const ws = workspaceRef.current;
+    if (!ws) return;
+    const st = ws.querySelector(".watch-stage");
+    const sb = ws.querySelector(".sidebar");
+    if (st) { st.style.transition = "none"; st.style.transform = `translateX(${movieX}px)`; }
+    if (sb) { sb.style.transition = "none"; sb.style.transform = `translateX(${camX}px)`; }
+  }
+
+  function endCamPointerDrag() {
+    const d = camDragRef.current;
+    if (!d) return;
+    camDragRef.current = null;
+    const ws = workspaceRef.current;
+    if (!ws) return;
+    const W = d.W || 1;
+    let camX = 0;
+    const sb = ws.querySelector(".sidebar");
+    const m = sb && sb.style.transform && sb.style.transform.match(/-?[\d.]+/);
+    if (m) camX = parseFloat(m[0]);
+    const toLeft = camX < -0.4 * W;
+    setCamSide(toLeft ? "left" : "right");
+    camSideRef.current = toLeft ? "left" : "right";
+    requestAnimationFrame(() => {
+      const st = ws.querySelector(".watch-stage");
+      if (st) { st.style.removeProperty("transition"); st.style.removeProperty("transform"); }
+      if (sb) { sb.style.removeProperty("transition"); sb.style.removeProperty("transform"); }
+    });
+  }
+
+  function handleCamPointerUp(e) { if (e.pointerId === camDragRef.current?.pointerId) endCamPointerDrag(); }
+  function handleCamPointerCancel(e) { if (e.pointerId === camDragRef.current?.pointerId) endCamPointerDrag(); }
 
   if (view === "home") {
     return (
@@ -1039,7 +1114,7 @@ setRoomId("");
         </div>
       </header>
 
-      <div className="workspace">
+      <div ref={workspaceRef} className={`workspace ${camSide === "left" ? "cams-left" : ""}`}>
         <section className="watch-stage">
           <div ref={stageRef} className={`movie-scene ${chromeVisible ? "" : "chrome-hidden"}`}>
             <div className="movie-surface">
@@ -1197,7 +1272,7 @@ setRoomId("");
             )}
 
             {!soloMode && (
-              <div className="cameras">
+              <div className="cameras" onPointerDown={handleCamPointerDown} onPointerMove={handleCamPointerMove} onPointerUp={handleCamPointerUp} onPointerCancel={handleCamPointerCancel}>
                 <div className={`cam-chip self ${media.cameraEnabled ? "" : "cam-off"}`}>
                   {media.cameraEnabled ? (
                     <video ref={localVideo} autoPlay muted playsInline />
