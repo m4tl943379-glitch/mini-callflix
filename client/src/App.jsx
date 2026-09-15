@@ -153,6 +153,7 @@ function App() {
   const [introOverlay, setIntroOverlay] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [camSide, setCamSide] = useState("right"); // fullscreen 80/20: "right" | "left"
+  const [sideSwitching, setSideSwitching] = useState(false); // chat icon fades during side transition
   const [chromeVisible, setChromeVisible] = useState(true);
   const [copyStatus, setCopyStatus] = useState("");
   const [iceInfo, setIceInfo] = useState("");
@@ -191,8 +192,9 @@ function App() {
   const stageRef = useRef(null);
   const workspaceRef = useRef(null);
   const camSideRef = useRef("right");
-  const camDragRef = useRef(null); // { pointerId, startX, startY, fromLeft, moved, camY0, zoneTop/Bottom, camTop/H, chatTop/H }
-  const camYRef = useRef(0); // fullscreen 80/20: vertical offset of the camera pair (px), chat mirrors inverse
+  const camDragRef = useRef(null); // { pointerId, startX, startY, fromLeft, moved, camY0, zoneTop/Bottom, camTop/H, chatTop/H, chatUp0 }
+  const camYRef = useRef(0); // fullscreen 80/20: vertical offset of the camera pair (px); chat is INDEPENDENT (bottom rail, lifts only as a collision cushion)
+  const sideSwitchTimer = useRef(null); // chat-icon fade during side transitions
   const camTapRef = useRef(null); // { t, x, y } last quick tap on the pair for double-tap side switch
   const chromeTimer = useRef(null);
   const remoteStreamRef = useRef(null);
@@ -865,6 +867,8 @@ setRoomId("");
         camDragRef.current = null;
         camYRef.current = 0;
         camTapRef.current = null;
+        clearTimeout(sideSwitchTimer.current);
+        setSideSwitching(false);
         const ws = workspaceRef.current;
         if (ws) {
           const st = ws.querySelector(".watch-stage");
@@ -950,7 +954,18 @@ setRoomId("");
 
   /* Fullscreen 80/20 camera-pair drag: the pair is a LOCKED group; dragging it
      horizontally only switches the dedicated camera zone between RIGHT and LEFT
-     (movie stays 80%, cameras stay 20%, no free positioning). */
+     (movie stays 80%, cameras stay 20%, no free positioning). Vertically the
+     pair slides freely inside the zone (top rail) while the chat sits at its
+     own resting spot on the bottom rail — chat is INDEPENDENT (no inverse
+     mirror) and only lifts a little as a cushion when the pair approaches. */
+  const CAM_DRAG_GAP = 16; // min px kept between pair bottom and chat top
+  const CHAT_MAX_UP = 60; // max cushion lift of the chat (px)
+  const SIDE_SWITCH_MS = 620; // chat-icon fade duration ≈ side slide (.55s) + buffer
+  function beginSideSwitch() {
+    setSideSwitching(true);
+    clearTimeout(sideSwitchTimer.current);
+    sideSwitchTimer.current = setTimeout(() => setSideSwitching(false), SIDE_SWITCH_MS);
+  }
   function handleCamPointerDown(e) {
     if (!isFullscreen) return;
     if (typeof e.button === "number" && e.button !== 0) return;
@@ -974,6 +989,11 @@ setRoomId("");
     const zb = sb ? sb.getBoundingClientRect() : null;
     const cb = camEl ? camEl.getBoundingClientRect() : null;
     const hb = chatEl ? chatEl.getBoundingClientRect() : null;
+    let chatUp0 = 0;
+    if (chatEl) {
+      const m = (chatEl.style.transform || "").match(/translateY\((-?[\d.]+)px\)/);
+      if (m) chatUp0 = -parseFloat(m[1]);
+    }
     camDragRef.current = {
       pointerId: e.pointerId,
       startX: e.clientX, startY: e.clientY,
@@ -981,7 +1001,7 @@ setRoomId("");
       moved: false, camY0: camYRef.current,
       zoneTop: zb ? zb.top : 0, zoneBottom: zb ? zb.bottom : 0,
       camTop: cb ? cb.top : 0, camH: cb ? cb.height : 0,
-      chatTop: hb ? hb.top : 0, chatH: hb ? hb.height : 0
+      chatTop: hb ? hb.top : 0, chatH: hb ? hb.height : 0, chatUp0
     };
     e.currentTarget.setPointerCapture?.(e.pointerId);
   }
@@ -1004,17 +1024,34 @@ setRoomId("");
     const chatEl = ws.querySelector(".chat-area");
     if (st) { st.style.transition = "none"; st.style.transform = `translateX(${movieX}px)`; }
     if (sb) { sb.style.transition = "none"; sb.style.transform = `translateX(${camX}px)`; }
-    /* vertical: the pair slides up/down inside the zone; chat mirrors the inverse
-       move and both stay clamped so neither leaves the active 20% zone NOR
-       overlaps the other (keep ≥12px between them) */
-    const lo = Math.max(d.camY0 + (d.zoneTop - d.camTop), d.chatTop + d.camY0 + d.chatH - d.zoneBottom);
-    let hi = Math.min(d.camY0 + (d.zoneBottom - d.camTop - d.camH), d.chatTop + d.camY0 - d.zoneTop);
-    const gapStart = d.chatTop - (d.camTop + d.camH);
-    hi = Math.min(hi, d.camY0 + (gapStart - 12) / 2);
-    const newY = Math.min(hi, Math.max(lo, d.camY0 + dy));
+    /* vertical: the pair slides freely inside the zone (top rail). The chat
+       keeps its OWN resting spot (bottom rail) and NEVER mirrors the move — it
+       only lifts UPWARD as a collision cushion while the pair approaches its
+       top, exactly enough to hold the gap at CAM_DRAG_GAP; the pair clamps
+       above the chat's fully-lifted top, so they can never touch. When the pair
+       retreats, the chat glides back down (its CSS transition). */
+    const defaultChatTop = d.chatTop + d.chatUp0;
+    const camBotMax = defaultChatTop - CHAT_MAX_UP - CAM_DRAG_GAP;
+    const camTopMax = Math.max(d.zoneTop, Math.min(d.zoneBottom - d.camH, camBotMax - d.camH));
+    const top = Math.min(camTopMax, Math.max(d.zoneTop, d.camTop + dy));
+    const camBot = top + d.camH;
+    const newY = d.camY0 + (top - d.camTop);
     camYRef.current = newY;
     if (camEl) { camEl.style.transition = "none"; camEl.style.transform = `translateY(${newY}px)`; }
-    if (chatEl) { chatEl.style.transition = "none"; chatEl.style.transform = `translateY(${-newY}px)`; }
+    if (chatEl) {
+      /* lift window: chat rises 0→CHAT_MAX_UP over the last CHAT_MAX_UP px of
+         approach; cameras stop at camBotMax so the gap is ALWAYS ≥ GAP and the
+         lift never exceeds CHAT_MAX_UP. Outside the window chat stays at rest. */
+      const liftStart = camBotMax - CHAT_MAX_UP;
+      const chatUp = Math.min(CHAT_MAX_UP, Math.max(0, camBot - liftStart));
+      if (chatUp > 0.5) {
+        chatEl.style.transition = "none";
+        chatEl.style.transform = `translateY(${-chatUp}px)`;
+      } else {
+        chatEl.style.transition = "transform .3s var(--ease)";
+        chatEl.style.transform = "translateY(0px)";
+      }
+    }
   }
 
   function endCamPointerDrag() {
@@ -1037,6 +1074,7 @@ setRoomId("");
       const toLeft = camX < -0.4 * W;
       setCamSide(toLeft ? "left" : "right");
       camSideRef.current = toLeft ? "left" : "right";
+      beginSideSwitch();
     }
     requestAnimationFrame(() => {
       if (st) { st.style.removeProperty("transition"); st.style.removeProperty("transform"); }
@@ -1052,6 +1090,7 @@ setRoomId("");
     const next = camSideRef.current === "left" ? "right" : "left";
     setCamSide(next);
     camSideRef.current = next;
+    beginSideSwitch();
     const ws = workspaceRef.current;
     if (!ws) return;
     requestAnimationFrame(() => {
@@ -1377,16 +1416,6 @@ setRoomId("");
             )}
 
             <div className="chat-area">
-              <button
-                className={`chat-icon-btn ${chatOpen ? "hidden" : ""}`}
-                onClick={() => setChatOpen(true)}
-                title="Toggle chat"
-                aria-label="Toggle chat"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
-                {unreadMsgs > 0 && <span className="msg-badge">{unreadMsgs > 9 ? "9+" : unreadMsgs}</span>}
-              </button>
-
               <div className={`chat-panel ${chatOpen ? "open" : "closed"}`}>
                 <div className="chat">
                     <div className="chat-title-row">
@@ -1411,6 +1440,16 @@ setRoomId("");
               </div>
           </aside>
         )}
+
+        <button
+          className={`chat-icon-btn ${chatOpen ? "hidden" : ""} ${sideSwitching ? "side-switching" : ""}`}
+          onClick={() => setChatOpen(true)}
+          title="Toggle chat"
+          aria-label="Toggle chat"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
+          {unreadMsgs > 0 && <span className="msg-badge">{unreadMsgs > 9 ? "9+" : unreadMsgs}</span>}
+        </button>
       </div>
 
       {!soloMode && (

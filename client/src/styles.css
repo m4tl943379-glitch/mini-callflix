@@ -459,7 +459,11 @@ button { cursor: pointer; }
 .room-page:fullscreen .sidebar .invite-box,
 .room-page:-webkit-full-screen .sidebar .invite-box { display: none; }
 .room-page:fullscreen .chat-icon-btn,
-.room-page:-webkit-full-screen .chat-icon-btn { top: auto; left: auto; right: 14px; bottom: 10px; transform: none; }
+.room-page:-webkit-full-screen .chat-icon-btn { position: fixed; top: auto; left: auto; right: 14px; bottom: 12px; transform: none; z-index: 60; }
+.room-page:fullscreen .workspace.cams-left .chat-icon-btn,
+.room-page:-webkit-full-screen .workspace.cams-left .chat-icon-btn { left: 16px; right: auto; }
+.room-page:fullscreen .chat-icon-btn.side-switching,
+.room-page:-webkit-full-screen .chat-icon-btn.side-switching { opacity: 0; pointer-events: none; }
 .room-page:fullscreen .mobile-bar,
 .room-page:-webkit-full-screen .mobile-bar { display: none; }
 .room-page:fullscreen .chat-panel.closed,
@@ -494,16 +498,17 @@ button { cursor: pointer; }
   transition: transform .55s cubic-bezier(.22, 1, .36, 1);
   will-change: transform;
 }
-/* cameras stay a LOCKED vertical pair inside the 20% zone; dragging the pair
-   slides it up/down while the chat mirrors the inverse move. Auto margins split
-   the zone's free space above, between and below the pair+chat so BOTH
-   directions have equal travel; JS clamps keep neither outside the zone nor
-   overlapping. Side switch stays horizontal-only (translateX on the zone
-   containers + .cams-left). */
+/* cameras stay a LOCKED vertical pair inside the 20% zone, top-anchored
+   (margin 0 0 auto); the chat keeps its OWN resting spot on the bottom rail
+   (margin auto 0 0) and is INDEPENDENT — it never mirrors the pair. Dragging
+   the pair up/down moves only the pair (JS clamps it to the zone); the chat
+   lifts a small cushion only when the pair approaches it, then glides back
+   (transition below). Side switch stays horizontal-only (translateX on the
+   zone containers + .cams-left). */
 .room-page:fullscreen .sidebar .cameras,
 .room-page:-webkit-full-screen .sidebar .cameras {
   flex: 0 0 auto; justify-content: center; gap: 10px; align-items: center;
-  margin: auto 0;
+  margin: 0 0 auto;
   cursor: grab; touch-action: none;
   will-change: transform; transform: translateY(0);
 }
@@ -514,7 +519,8 @@ button { cursor: pointer; }
 .room-page:fullscreen .sidebar .chat-area,
 .room-page:-webkit-full-screen .sidebar .chat-area {
   flex: 0 0 auto; height: 26%; min-height: 0;
-  margin: auto 0;
+  margin: auto 0 0;
+  transition: transform .3s var(--ease);
   will-change: transform; transform: translateY(0);
 }
 
@@ -630,6 +636,7 @@ button { cursor: pointer; }
   color: var(--text-2); cursor: pointer;
   display: grid; place-items: center;
   box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+  z-index: 30;
   transition: opacity .3s var(--ease), background var(--m-fast), color var(--m-fast), box-shadow var(--m-fast);
 }
 .chat-icon-btn:hover { background: rgba(255, 255, 255, .13); color: #fff; box-shadow: 0 12px 34px rgba(0, 0, 0, .5); }
@@ -978,7 +985,7 @@ button { cursor: pointer; }
   .sidebar .invite-box { display: none; }
   .sidebar .cameras { display: none; }
   .chat-area { flex: 1; min-height: 0; }
-  .chat-icon-btn { right: 16px; bottom: 16px; top: auto; left: auto; }
+  .chat-icon-btn { display: none; } /* mobile uses the .mobile-bar chat button instead */
 
   /* floating cameras over the movie */
   .camera-overlays { display: block; position: absolute; top: 10px; left: 10px; right: 10px; z-index: 7; pointer-events: none; }
