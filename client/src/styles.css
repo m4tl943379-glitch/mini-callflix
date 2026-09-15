@@ -459,7 +459,7 @@ button { cursor: pointer; }
 .room-page:fullscreen .sidebar .invite-box,
 .room-page:-webkit-full-screen .sidebar .invite-box { display: none; }
 .room-page:fullscreen .chat-icon-btn,
-.room-page:-webkit-full-screen .chat-icon-btn { top: auto; bottom: 10px; transform: translateX(-50%); }
+.room-page:-webkit-full-screen .chat-icon-btn { top: auto; left: auto; right: 14px; bottom: 10px; transform: none; }
 .room-page:fullscreen .mobile-bar,
 .room-page:-webkit-full-screen .mobile-bar { display: none; }
 .room-page:fullscreen .chat-panel.closed,
@@ -471,13 +471,12 @@ button { cursor: pointer; }
   .room-page:-webkit-full-screen .sidebar { display: none; }
 }
 
-/* ───────── ROOM — sidebar ───────── */
+/* ───────── ROOM — sidebar ─────────
+   No outer card / border — the sidebar floats as a plain column so the
+   cinematic camera cards speak for themselves. */
 .sidebar {
   width: 370px; flex-shrink: 0;
-  background: linear-gradient(180deg, rgba(18, 18, 24, .96), rgba(12, 12, 16, .96));
-  border: 1px solid var(--line-soft); border-radius: var(--r-l);
   padding: 15px; display: flex; flex-direction: column; min-height: 0; gap: 12px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), var(--sh-1);
 }
 
 /* invite / waiting card — the "cinema is ready" moment */
@@ -558,17 +557,19 @@ button { cursor: pointer; }
   font-weight: 800; font-size: 13px; letter-spacing: .2em; color: var(--faint); background: #0a0a0e;
 }
 
-/* chat — intimate, not corporate */
+/* chat — intimate, not corporate; closed chat = discreet floating utility button,
+   bottom-right of the room container, clear of cameras and edges */
 .chat-area { position: relative; flex: 1; min-height: 0; }
 .chat-icon-btn {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  width: 46px; height: 46px; border-radius: 50%;
-  background: rgba(255, 255, 255, .05); border: 1px solid var(--line-soft);
+  position: absolute; right: 14px; bottom: 14px;
+  width: 42px; height: 42px; border-radius: 50%;
+  background: rgba(255, 255, 255, .06); border: 1px solid var(--line-soft);
   color: var(--text-2); cursor: pointer;
   display: grid; place-items: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
   transition: opacity .3s var(--ease), background var(--m-fast), color var(--m-fast), box-shadow var(--m-fast);
 }
-.chat-icon-btn:hover { background: rgba(255, 255, 255, .13); color: #fff; box-shadow: 0 8px 26px rgba(0, 0, 0, .45); }
+.chat-icon-btn:hover { background: rgba(255, 255, 255, .13); color: #fff; box-shadow: 0 12px 34px rgba(0, 0, 0, .5); }
 .chat-icon-btn.hidden { opacity: 0; pointer-events: none; }
 .chat-panel {
   position: absolute; inset: 0;
@@ -903,6 +904,7 @@ button { cursor: pointer; }
   .sidebar {
     position: fixed; bottom: 0; left: 0; right: 0; top: auto;
     width: 100%; height: 60vh; max-height: 62vh; min-height: 0;
+    background: linear-gradient(180deg, rgba(18, 18, 24, .97), rgba(12, 12, 16, .97));
     border-radius: 20px 20px 0 0; padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px));
     z-index: 40; gap: 10px;
     transform: translateY(105%); opacity: 0; pointer-events: none;
@@ -913,7 +915,7 @@ button { cursor: pointer; }
   .sidebar .invite-box { display: none; }
   .sidebar .cameras { display: none; }
   .chat-area { flex: 1; min-height: 0; }
-  .chat-icon-btn { top: 50%; }
+  .chat-icon-btn { right: 16px; bottom: 16px; top: auto; left: auto; }
 
   /* floating cameras over the movie */
   .camera-overlays { display: block; position: absolute; top: 10px; left: 10px; right: 10px; z-index: 7; pointer-events: none; }
