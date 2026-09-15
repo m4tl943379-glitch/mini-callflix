@@ -494,18 +494,29 @@ button { cursor: pointer; }
   transition: transform .55s cubic-bezier(.22, 1, .36, 1);
   will-change: transform;
 }
-/* cameras stay a locked vertical pair inside the 20% zone */
+/* cameras stay a LOCKED vertical pair inside the 20% zone; dragging the pair
+   slides it up/down while the chat mirrors the inverse move. Auto margins split
+   the zone's free space above, between and below the pair+chat so BOTH
+   directions have equal travel; JS clamps keep neither outside the zone nor
+   overlapping. Side switch stays horizontal-only (translateX on the zone
+   containers + .cams-left). */
 .room-page:fullscreen .sidebar .cameras,
 .room-page:-webkit-full-screen .sidebar .cameras {
-  flex: 1; justify-content: center; gap: 10px; align-items: center;
-  cursor: grab; touch-action: pan-y;
+  flex: 0 0 auto; justify-content: center; gap: 10px; align-items: center;
+  margin: auto 0;
+  cursor: grab; touch-action: none;
+  will-change: transform; transform: translateY(0);
 }
 .room-page:fullscreen .sidebar .cameras:active,
 .room-page:-webkit-full-screen .sidebar .cameras:active { cursor: grabbing; }
 .room-page:fullscreen .sidebar .cam-chip,
-.room-page:-webkit-full-screen .sidebar .cam-chip { max-height: 42%; opacity: 1; }
+.room-page:-webkit-full-screen .sidebar .cam-chip { max-height: 40vh; opacity: 1; }
 .room-page:fullscreen .sidebar .chat-area,
-.room-page:-webkit-full-screen .sidebar .chat-area { flex: 0 0 auto; height: 26%; min-height: 0; }
+.room-page:-webkit-full-screen .sidebar .chat-area {
+  flex: 0 0 auto; height: 26%; min-height: 0;
+  margin: auto 0;
+  will-change: transform; transform: translateY(0);
+}
 
 /* LEFT layout: cameras swap to the left 20%, movie slides to the right 80% */
 .room-page:fullscreen .workspace.cams-left .watch-stage,

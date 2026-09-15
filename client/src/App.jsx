@@ -147,6 +147,7 @@ function App() {
   const [editingMovie, setEditingMovie] = useState(false);
   const [newLink, setNewLink] = useState("");
   const [playback, setPlayback] = useState(null);
+  const [movieStarted, setMovieStarted] = useState(false); // hides pre-start scene topbar
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [chatOpen, setChatOpen] = useState(true);
   const [introOverlay, setIntroOverlay] = useState(false);
@@ -190,7 +191,9 @@ function App() {
   const stageRef = useRef(null);
   const workspaceRef = useRef(null);
   const camSideRef = useRef("right");
-  const camDragRef = useRef(null); // { pointerId, startX, fromLeft, moved } for fullscreen pair drag
+  const camDragRef = useRef(null); // { pointerId, startX, startY, fromLeft, moved, camY0, zoneTop/Bottom, camTop/H, chatTop/H }
+  const camYRef = useRef(0); // fullscreen 80/20: vertical offset of the camera pair (px), chat mirrors inverse
+  const camTapRef = useRef(null); // { t, x, y } last quick tap on the pair for double-tap side switch
   const chromeTimer = useRef(null);
   const remoteStreamRef = useRef(null);
   const reconnectTimer = useRef(null);
@@ -346,6 +349,7 @@ function App() {
       setRoomId("");
       setRoomState(null);
       setPlayback(null);
+      setMovieStarted(false);
       setMessages([]);
       setUnreadMsgs(0);
       setLinkInput("");
@@ -612,7 +616,12 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (playback && (playback.playing || (playback.time || 0) > 0)) setMovieStarted(true);
+  }, [playback]);
+
 function startMovie() {
+    setMovieStarted(true);
     playerRef.current?.play();
   }
 
@@ -693,6 +702,7 @@ function startMovie() {
   }
 
   function startMovieFromCapsule() {
+    setMovieStarted(true);
     setIntroStep("done");
     setIntroOverlay(true);
     setTimeout(() => {
@@ -725,6 +735,7 @@ function stopLocalMedia() {
 
   function resetRoomUi() {
     setPlayback(null);
+    setMovieStarted(false);
     setMessages([]);
     setUnreadMsgs(0);
     setLinkInput("");
@@ -852,12 +863,18 @@ setRoomId("");
         setCamSide("right");
         camSideRef.current = "right";
         camDragRef.current = null;
+        camYRef.current = 0;
+        camTapRef.current = null;
         const ws = workspaceRef.current;
         if (ws) {
           const st = ws.querySelector(".watch-stage");
           const sb = ws.querySelector(".sidebar");
           if (st) { st.style.removeProperty("transition"); st.style.removeProperty("transform"); }
           if (sb) { sb.style.removeProperty("transition"); sb.style.removeProperty("transform"); }
+          const camEl = ws.querySelector(".cameras");
+          const chatEl = ws.querySelector(".chat-area");
+          if (camEl) { camEl.style.removeProperty("transition"); camEl.style.removeProperty("transform"); }
+          if (chatEl) { chatEl.style.removeProperty("transition"); chatEl.style.removeProperty("transform"); }
         }
       }
     };
@@ -938,25 +955,66 @@ setRoomId("");
     if (!isFullscreen) return;
     if (typeof e.button === "number" && e.button !== 0) return;
     if (e.target && e.target.closest && e.target.closest("button")) return;
+    /* double-tap detection (pointer-based: works with mouse AND touch, no
+       reliance on the platform's dblclick event): two quick taps on the pair
+       switch the dedicated zone side instantly — no reload, no reconnect. */
+    const now = e.timeStamp || Date.now();
+    const lastTap = camTapRef.current;
+    if (lastTap && now - lastTap.t < 320 && Math.abs(e.clientX - lastTap.x) < 40 && Math.abs(e.clientY - lastTap.y) < 40) {
+      camTapRef.current = null;
+      toggleCamSide();
+      return;
+    }
+    camTapRef.current = { t: now, x: e.clientX, y: e.clientY };
     const ws = workspaceRef.current;
     if (!ws) return;
-    camDragRef.current = { pointerId: e.pointerId, startX: e.clientX, fromLeft: camSideRef.current === "left", W: ws.clientWidth };
+    const sb = ws.querySelector(".sidebar");
+    const camEl = ws.querySelector(".cameras");
+    const chatEl = ws.querySelector(".chat-area");
+    const zb = sb ? sb.getBoundingClientRect() : null;
+    const cb = camEl ? camEl.getBoundingClientRect() : null;
+    const hb = chatEl ? chatEl.getBoundingClientRect() : null;
+    camDragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX, startY: e.clientY,
+      fromLeft: camSideRef.current === "left", W: ws.clientWidth,
+      moved: false, camY0: camYRef.current,
+      zoneTop: zb ? zb.top : 0, zoneBottom: zb ? zb.bottom : 0,
+      camTop: cb ? cb.top : 0, camH: cb ? cb.height : 0,
+      chatTop: hb ? hb.top : 0, chatH: hb ? hb.height : 0
+    };
     e.currentTarget.setPointerCapture?.(e.pointerId);
   }
 
   function handleCamPointerMove(e) {
     const d = camDragRef.current;
     if (!d) return;
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) d.moved = true;
     const W = d.W || 1;
     const base = d.fromLeft ? -0.8 * W : 0;
-    const camX = Math.max(-0.8 * W, Math.min(0, base + (e.clientX - d.startX)));
+    const camX = Math.max(-0.8 * W, Math.min(0, base + dx));
     const movieX = -camX / 4;
     const ws = workspaceRef.current;
     if (!ws) return;
     const st = ws.querySelector(".watch-stage");
     const sb = ws.querySelector(".sidebar");
+    const camEl = ws.querySelector(".cameras");
+    const chatEl = ws.querySelector(".chat-area");
     if (st) { st.style.transition = "none"; st.style.transform = `translateX(${movieX}px)`; }
     if (sb) { sb.style.transition = "none"; sb.style.transform = `translateX(${camX}px)`; }
+    /* vertical: the pair slides up/down inside the zone; chat mirrors the inverse
+       move and both stay clamped so neither leaves the active 20% zone NOR
+       overlaps the other (keep ≥12px between them) */
+    const lo = Math.max(d.camY0 + (d.zoneTop - d.camTop), d.chatTop + d.camY0 + d.chatH - d.zoneBottom);
+    let hi = Math.min(d.camY0 + (d.zoneBottom - d.camTop - d.camH), d.chatTop + d.camY0 - d.zoneTop);
+    const gapStart = d.chatTop - (d.camTop + d.camH);
+    hi = Math.min(hi, d.camY0 + (gapStart - 12) / 2);
+    const newY = Math.min(hi, Math.max(lo, d.camY0 + dy));
+    camYRef.current = newY;
+    if (camEl) { camEl.style.transition = "none"; camEl.style.transform = `translateY(${newY}px)`; }
+    if (chatEl) { chatEl.style.transition = "none"; chatEl.style.transform = `translateY(${-newY}px)`; }
   }
 
   function endCamPointerDrag() {
@@ -966,15 +1024,21 @@ setRoomId("");
     const ws = workspaceRef.current;
     if (!ws) return;
     const W = d.W || 1;
-    let camX = 0;
+    const camEl = ws.querySelector(".cameras");
+    const chatEl = ws.querySelector(".chat-area");
+    if (camEl) camEl.style.removeProperty("transition");
+    if (chatEl) chatEl.style.removeProperty("transition");
+    const st = ws.querySelector(".watch-stage");
     const sb = ws.querySelector(".sidebar");
-    const m = sb && sb.style.transform && sb.style.transform.match(/-?[\d.]+/);
-    if (m) camX = parseFloat(m[0]);
-    const toLeft = camX < -0.4 * W;
-    setCamSide(toLeft ? "left" : "right");
-    camSideRef.current = toLeft ? "left" : "right";
+    if (d.moved) {
+      let camX = 0;
+      const m = sb && sb.style.transform && sb.style.transform.match(/-?[\d.]+/);
+      if (m) camX = parseFloat(m[0]);
+      const toLeft = camX < -0.4 * W;
+      setCamSide(toLeft ? "left" : "right");
+      camSideRef.current = toLeft ? "left" : "right";
+    }
     requestAnimationFrame(() => {
-      const st = ws.querySelector(".watch-stage");
       if (st) { st.style.removeProperty("transition"); st.style.removeProperty("transform"); }
       if (sb) { sb.style.removeProperty("transition"); sb.style.removeProperty("transform"); }
     });
@@ -982,6 +1046,21 @@ setRoomId("");
 
   function handleCamPointerUp(e) { if (e.pointerId === camDragRef.current?.pointerId) endCamPointerDrag(); }
   function handleCamPointerCancel(e) { if (e.pointerId === camDragRef.current?.pointerId) endCamPointerDrag(); }
+
+  /* Double-tap the camera pair → instant side switch (no reload, no reconnect). */
+  function toggleCamSide() {
+    const next = camSideRef.current === "left" ? "right" : "left";
+    setCamSide(next);
+    camSideRef.current = next;
+    const ws = workspaceRef.current;
+    if (!ws) return;
+    requestAnimationFrame(() => {
+      const st = ws.querySelector(".watch-stage");
+      const sb = ws.querySelector(".sidebar");
+      if (st) { st.style.removeProperty("transition"); st.style.removeProperty("transform"); }
+      if (sb) { sb.style.removeProperty("transition"); sb.style.removeProperty("transform"); }
+    });
+  }
 
   if (view === "home") {
     return (
@@ -1131,39 +1210,41 @@ setRoomId("");
               />
             </div>
 
-            <div className="scene-topbar">
-              <span className="eyebrow">TONIGHT'S MOVIE</span>
-              <h2 className="scene-title">My Movie</h2>
-              {editingMovie && (
-                <input
-                  className="link-input"
-                  value={newLink}
-                  onChange={(e) => setNewLink(e.target.value)}
-                  placeholder="https://example.com/movie.mp4"
-                  onKeyDown={(e) => { if (e.key === "Enter") saveMovieLink(); }}
-                  autoFocus
-                />
-              )}
-              <div className="meta-actions">
-                {role === "host" && !editingMovie && (
-                  <>
-                    <button
-                      className="ghost compact"
-                      onClick={() => { setNewLink(movieUrl === MOVIE_SRC ? "" : movieUrl); setEditingMovie(true); }}
-                    >
-                      Link
-                    </button>
-                    <button className="primary compact" onClick={startMovie}>Start Movie</button>
-                  </>
+            {!movieStarted && (
+              <div className="scene-topbar">
+                <span className="eyebrow">TONIGHT'S MOVIE</span>
+                <h2 className="scene-title">My Movie</h2>
+                {editingMovie && (
+                  <input
+                    className="link-input"
+                    value={newLink}
+                    onChange={(e) => setNewLink(e.target.value)}
+                    placeholder="https://example.com/movie.mp4"
+                    onKeyDown={(e) => { if (e.key === "Enter") saveMovieLink(); }}
+                    autoFocus
+                  />
                 )}
-                {role === "host" && editingMovie && (
-                  <>
-                    <button className="primary compact" onClick={saveMovieLink}>Save</button>
-                    <button className="ghost compact" onClick={() => setEditingMovie(false)}>Cancel</button>
-                  </>
-                )}
+                <div className="meta-actions">
+                  {role === "host" && !editingMovie && (
+                    <>
+                      <button
+                        className="ghost compact"
+                        onClick={() => { setNewLink(movieUrl === MOVIE_SRC ? "" : movieUrl); setEditingMovie(true); }}
+                      >
+                        Link
+                      </button>
+                      <button className="primary compact" onClick={startMovie}>Start Movie</button>
+                    </>
+                  )}
+                  {role === "host" && editingMovie && (
+                    <>
+                      <button className="primary compact" onClick={saveMovieLink}>Save</button>
+                      <button className="ghost compact" onClick={() => setEditingMovie(false)}>Cancel</button>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="control-bar">
               {!soloMode && !partnerLeftAlert && (
