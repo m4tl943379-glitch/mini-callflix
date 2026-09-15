@@ -47,6 +47,8 @@ function createRoom() {
     host: null,
     guest: null,
     movieUrl: "",
+    ready: {},
+    movieStarted: false,
     playback: { playing: false, time: 0, updatedAt: Date.now() }
   });
   return id;
@@ -70,12 +72,21 @@ function roleOf(room, socketId) {
   return null;
 }
 
+function readyFlags(room) {
+  return {
+    host: Boolean(room.host && room.ready[room.host.socketId]),
+    guest: Boolean(room.guest && room.ready[room.guest.socketId])
+  };
+}
+
 function publicState(room) {
   return {
     count: participantCount(room),
     host: room.host ? { name: room.host.name } : null,
     guest: room.guest ? { name: room.guest.name } : null,
     movieUrl: room.movieUrl,
+    ready: readyFlags(room),
+    movieStarted: room.movieStarted,
     playback: room.playback
   };
 }
@@ -225,6 +236,23 @@ io.on("connection", (socket) => {
     });
   });
 
+  // Ready gate (squad-style): each member toggles readiness. The server is the
+  // single authority: it keeps both flags, rebroadcasts {host, guest} so both
+  // clients converge, and when BOTH are ready it broadcasts the synchronized
+  // movie-start event exactly once (guarded by room.movieStarted).
+  socket.on("ready:set", ({ roomId, ready }) => {
+    const room = rooms.get(roomId);
+    if (!room || socket.data.roomId !== roomId) return;
+    room.ready[socket.id] = Boolean(ready);
+    io.to(roomId).emit("room:ready", { ready: readyFlags(room) });
+    const r = readyFlags(room);
+    if (r.host && r.guest && !room.movieStarted) {
+      room.movieStarted = true;
+      room.playback = { playing: true, time: 0, updatedAt: Date.now() };
+      io.to(roomId).emit("movie:start");
+    }
+  });
+
   // Film sync: both participants are leaders. The server only relays the action
   // (stamped with the sender id for loop protection) and remembers the last state
   // so a late joiner can resume at the same time.
@@ -267,7 +295,10 @@ io.on("connection", (socket) => {
 
     room.movieUrl = sanitizeMovieUrl(movieUrl);
     room.playback = { playing: false, time: 0, updatedAt: Date.now() };
+    room.ready = {};
+    room.movieStarted = false;
     io.to(roomId).emit("movie:url", { movieUrl: room.movieUrl });
+    io.to(roomId).emit("room:ready", { ready: readyFlags(room) });
   });
 
   socket.on("chat:message", ({ roomId, message }) => {
@@ -324,6 +355,7 @@ function handleDisconnect(socket, explicitLeave) {
 
   if (role === "host") room.host = null;
   if (role === "guest") room.guest = null;
+  room.ready = {};
 
   socket.leave(roomId);
   socket.data.roomId = null;

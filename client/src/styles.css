@@ -158,9 +158,8 @@ button { cursor: pointer; }
 .error { margin-top: 14px; color: #ff8d94; font-size: 13px; display: flex; align-items: center; gap: 6px; }
 .error::before { content: "⚠"; font-size: 12px; }
 
-/* shared ghost / compact / link-input (scene topbar) */
+/* shared ghost / compact (scene topbar) */
 .compact   { padding: 9px 16px; border-radius: var(--r-s); }
-.meta-actions { display: flex; gap: 8px; align-items: center; }
 .ghost {
   background: rgba(255, 255, 255, .04); border: 1px solid var(--line);
   color: var(--text-2); padding: 9px 16px; border-radius: var(--r-s);
@@ -571,6 +570,29 @@ button { cursor: pointer; }
 }
 @keyframes waitingPulse { 0%, 100% { opacity: .35; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.15); } }
 
+/* ready button — compact bottom-right inside the invite box */
+.ready-btn {
+  position: absolute; right: 9px; bottom: 9px;
+  padding: 6px 14px; font-size: 11px; font-weight: 600; letter-spacing: .03em;
+  border-radius: var(--r-m); border: 1px solid rgba(255, 255, 255, .1);
+  background: rgba(255, 255, 255, .04); color: var(--text-2);
+  cursor: pointer; white-space: nowrap;
+  transition: background var(--m-fast) var(--ease), border-color var(--m-fast) var(--ease),
+              color var(--m-fast) var(--ease), transform var(--m-fast) var(--ease);
+}
+.ready-btn:hover { background: rgba(255, 255, 255, .09); color: #fff; }
+.ready-btn:active { transform: scale(.96); }
+.ready-btn.on {
+  background: rgba(229, 9, 20, .16); border-color: rgba(229, 9, 20, .45);
+  color: var(--accent-hi);
+  box-shadow: 0 0 14px rgba(229, 9, 20, .25), inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+.ready-btn.on:hover { background: rgba(229, 9, 20, .24); }
+.ready-btn.partner-ready {
+  border-color: rgba(255, 40, 56, .32);
+  color: rgba(255, 170, 178, .85);
+}
+
 /* cameras — cinematic cards, like the person beside you */
 .cameras {
   display: flex; flex-direction: column; align-items: center; gap: 12px;
@@ -968,7 +990,6 @@ button { cursor: pointer; }
   .movie-scene { border-radius: 10px; }
   .scene-topbar { padding: 12px 12px 26px; }
   .scene-title { font-size: 14px; }
-  .scene-topbar .meta-actions .compact { padding: 8px 11px; font-size: 12px; }
 
   /* sidebar becomes a chat bottom sheet */
   .sidebar {

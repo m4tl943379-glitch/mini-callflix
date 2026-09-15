@@ -144,8 +144,6 @@ function App() {
   const [floatingReaction, setFloatingReaction] = useState(null);
   const [movieUrl, setMovieUrl] = useState(MOVIE_SRC);
   const [linkInput, setLinkInput] = useState("");
-  const [editingMovie, setEditingMovie] = useState(false);
-  const [newLink, setNewLink] = useState("");
   const [playback, setPlayback] = useState(null);
   const [movieStarted, setMovieStarted] = useState(false); // hides pre-start scene topbar
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -167,6 +165,8 @@ function App() {
   const [feelSent, setFeelSent] = useState(false);
   const [feelClosing, setFeelClosing] = useState(false);
   const [unreadMsgs, setUnreadMsgs] = useState(0);
+  const [readyMe, setReadyMe] = useState(false);
+  const [readyPartner, setReadyPartner] = useState(false);
   const feelToastTimer = useRef(null);
   const feelCloseTimer = useRef(null);
   const feelSentTimer = useRef(null);
@@ -263,6 +263,16 @@ function App() {
       setRoomState(state);
       setNotice(`${participant.name} joined the room.`);
       if (role === "host") startPeer(true);
+      applyReady(state?.ready, role);
+    };
+
+    const onReady = ({ ready }) => {
+      if (!ready) return;
+      applyReady(ready, role);
+    };
+
+    const onMovieStart = () => {
+      startMovie();
     };
 
     const onOffer = async ({ offer }) => {
@@ -333,6 +343,8 @@ function App() {
       connectionLost.current = false;
       setIceInfo("");
       setPartnerLeftAlert(true);
+      setReadyMe(false);
+      setReadyPartner(false);
     };
 
     const onMovieUrl = ({ movieUrl }) => {
@@ -355,7 +367,6 @@ function App() {
       setMessages([]);
       setUnreadMsgs(0);
       setLinkInput("");
-      setEditingMovie(false);
       setMovieUrl(MOVIE_SRC);
       setIntroStep("idle");
       setFeelingOpen(false);
@@ -367,6 +378,8 @@ function App() {
       window.history.replaceState({}, "", "/");
       hasLeftRef.current = false;
       partnerLeftHandledRef.current = false;
+      setReadyMe(false);
+      setReadyPartner(false);
     };
 
     socket.on("room:participant-joined", onJoined);
@@ -380,6 +393,8 @@ function App() {
     socket.on("reaction:show", onReaction);
     socket.on("feel:show", onFeeling);
     socket.on("room:participant-left", onLeft);
+    socket.on("room:ready", onReady);
+    socket.on("movie:start", onMovieStart);
 
     return () => {
       socket.off("room:participant-joined", onJoined);
@@ -393,6 +408,8 @@ function App() {
       socket.off("reaction:show", onReaction);
       socket.off("feel:show", onFeeling);
       socket.off("room:participant-left", onLeft);
+      socket.off("room:ready", onReady);
+      socket.off("movie:start", onMovieStart);
     };
   }, [role, roomId]);
 
@@ -586,6 +603,7 @@ function App() {
       setMovieUrl((result.state?.movieUrl) || MOVIE_SRC);
       setPlayback(result.state?.playback || null);
       setView("room");
+      applyReady(result.state?.ready, result.role);
       await getLocalMedia();
       if (result.role === "host") setNotice("Waiting for your friend...");
     });
@@ -627,10 +645,17 @@ function startMovie() {
     playerRef.current?.play();
   }
 
-  function saveMovieLink() {
-    setMovieUrl(newLink.trim());
-    setEditingMovie(false);
-    socket.emit("movie:set", { roomId, movieUrl: newLink.trim() });
+  // Mirror the server's authoritative {host, guest} ready flags onto local state.
+  function applyReady(r, selfRole) {
+    if (!r || !selfRole) return;
+    setReadyMe(selfRole === "host" ? Boolean(r.host) : Boolean(r.guest));
+    setReadyPartner(selfRole === "host" ? Boolean(r.guest) : Boolean(r.host));
+  }
+
+function toggleReady() {
+    const next = !readyMe;
+    socket.emit("ready:set", { roomId, ready: next });
+    setReadyMe(next);
   }
 
   async function copyHeaderInvite() {
@@ -741,12 +766,13 @@ function stopLocalMedia() {
     setMessages([]);
     setUnreadMsgs(0);
     setLinkInput("");
-    setEditingMovie(false);
     setIntroStep("idle");
     setFeelingOpen(false);
     setFeelClosing(false);
     setFeelText("");
     setFeelToast(null);
+    setReadyMe(false);
+    setReadyPartner(false);
   }
 
   function backToHome() {
@@ -817,13 +843,15 @@ setRoomId("");
     setFeelText("");
     setFeelToast(null);
     window.history.replaceState({}, "", "/");
+    setReadyMe(false);
+    setReadyPartner(false);
   }
 
   function bumpChrome() {
     setChromeVisible(true);
     clearTimeout(chromeTimer.current);
     const focused = document.activeElement && document.activeElement.tagName === "INPUT";
-    if (focused || editingMovie) return;
+    if (focused) return;
     if (playback && !playback.playing) return;
     chromeTimer.current = setTimeout(() => setChromeVisible(false), 2600);
   }
@@ -853,7 +881,7 @@ setRoomId("");
       el.removeEventListener("touchstart", onActivity);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId, view, editingMovie]);
+  }, [roomId, view]);
 
   useEffect(() => {
     const onFs = () => {
@@ -1246,42 +1274,14 @@ setRoomId("");
                 selfId={socketId}
                 roomId={roomId}
                 solo={soloMode}
+                started={movieStarted}
               />
             </div>
 
-            {!movieStarted && (
+{!movieStarted && (
               <div className="scene-topbar">
                 <span className="eyebrow">TONIGHT'S MOVIE</span>
                 <h2 className="scene-title">My Movie</h2>
-                {editingMovie && (
-                  <input
-                    className="link-input"
-                    value={newLink}
-                    onChange={(e) => setNewLink(e.target.value)}
-                    placeholder="https://example.com/movie.mp4"
-                    onKeyDown={(e) => { if (e.key === "Enter") saveMovieLink(); }}
-                    autoFocus
-                  />
-                )}
-                <div className="meta-actions">
-                  {role === "host" && !editingMovie && (
-                    <>
-                      <button
-                        className="ghost compact"
-                        onClick={() => { setNewLink(movieUrl === MOVIE_SRC ? "" : movieUrl); setEditingMovie(true); }}
-                      >
-                        Link
-                      </button>
-                      <button className="primary compact" onClick={startMovie}>Start Movie</button>
-                    </>
-                  )}
-                  {role === "host" && editingMovie && (
-                    <>
-                      <button className="primary compact" onClick={saveMovieLink}>Save</button>
-                      <button className="ghost compact" onClick={() => setEditingMovie(false)}>Cancel</button>
-                    </>
-                  )}
-                </div>
               </div>
             )}
 
@@ -1387,7 +1387,20 @@ setRoomId("");
               <div className="invite-box">
                 <span className="eyebrow">PRIVATE ROOM</span>
                 <strong>{roomState?.count || 1}/2 participants</strong>
-                <small>{roomState?.count === 2 ? "Room is ready" : "Waiting for your friend..."}</small>
+                <small>
+                  {roomState?.count === 2
+                    ? (readyMe || readyPartner) ? "Waiting for your friend..." : "Room is ready"
+                    : "Waiting for your friend..."}
+                </small>
+                {roomState?.count === 2 && !movieStarted && !soloMode && (
+                  <button
+                    className={`ready-btn${readyMe ? " on" : ""}${readyPartner ? " partner-ready" : ""}`}
+                    onClick={toggleReady}
+                    aria-pressed={readyMe}
+                  >
+                    {readyMe ? "✓ READY" : "READY"}
+                  </button>
+                )}
               </div>
             )}
 

@@ -90,7 +90,7 @@ function fmt(sec) {
 }
 
 const MoviePlayer = forwardRef(function MoviePlayer(
-  { url, playback, onPlayback, onToggleFullscreen, io, selfId, roomId, solo = false },
+  { url, playback, onPlayback, onToggleFullscreen, io, selfId, roomId, solo = false, started = false },
   ref
 ) {
   const youtubeId = parseYouTubeId(url);
@@ -101,6 +101,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   const mirrorRef = useRef(false);     // while true, don't re-emit player events
   const appliedInitialRef = useRef(false);
   const initialRef = useRef(playback || null);
+  const startedRef = useRef(started);
   const playingRef = useRef(false);
   const volumeRef = useRef(100);
   const soloRef = useRef(solo);
@@ -121,6 +122,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   useEffect(() => { playingRef.current = playing; }, [playing]);
   useEffect(() => { volumeRef.current = volume; }, [volume]);
   useEffect(() => { soloRef.current = solo; }, [solo]);
+  useEffect(() => { startedRef.current = started; }, [started]);
 
   const getCur = () =>
     (youtubeId && ytPlayerRef.current)
@@ -204,7 +206,9 @@ const MoviePlayer = forwardRef(function MoviePlayer(
     };
   }, [io, selfId, applyRemote, recalcSync]);
 
-  /* Startup position: for a late joiner, jump right into the stored state once. */
+  /* Startup position: for a late joiner, jump right into the stored state once.
+     Never let a stale pre-start snapshot PAUSE playback that movie:start already
+     kicked off: once the movie has been started, the initial resume always plays. */
   const applyInitial = useCallback(() => {
     const st = initialRef.current;
     if (!st || appliedInitialRef.current || soloRef.current) return;
@@ -213,11 +217,12 @@ const MoviePlayer = forwardRef(function MoviePlayer(
     try {
       const t = Math.max(0, Number(st.time) || 0);
       if (t > 0) doSeek(t);
-      if (st.playing) doPlay();
+      if (st.playing || startedRef.current) doPlay();
       else doPause();
     } finally {
       setTimeout(() => { mirrorRef.current = false; }, 1000);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doPlay, doPause, doSeek]);
 
   useImperativeHandle(ref, () => ({
