@@ -267,12 +267,14 @@ io.on("connection", (socket) => {
   // Film sync: both participants are leaders. The server only relays the action
   // (stamped with the sender id for loop protection) and remembers the last state
   // so a late joiner can resume at the same time.
-  socket.on("film:action", ({ roomId, type, currentTime }) => {
+  socket.on("film:action", ({ roomId, type, currentTime, timestamp }) => {
     const room = rooms.get(roomId);
     if (!room || socket.data.roomId !== roomId) return;
     if (!FILM_ACTION_TYPES.has(type)) return;
     const time = Number(currentTime);
     if (!Number.isFinite(time) || time < 0) return;
+    const ts = Number(timestamp);
+    const tsValid = Number.isFinite(ts) && ts > 0;
 
     if (type === "seek") {
       room.playback = { ...room.playback, time, updatedAt: Date.now() };
@@ -283,19 +285,31 @@ io.on("connection", (socket) => {
     socket.to(roomId).emit("film:action", {
       type,
       currentTime: time,
-      timestamp: Date.now(),
+      timestamp: tsValid ? ts : Date.now(),
       from: socket.id
     });
   });
 
   // Lightweight periodic beat so both leaders re-converge on drift.
-  socket.on("film:sync", ({ roomId, currentTime, playing }) => {
-    if (socket.data.roomId !== roomId) return;
+  socket.on("film:sync", ({ roomId, currentTime, playing, timestamp }) => {
+    const room = rooms.get(roomId);
+    if (!room || socket.data.roomId !== roomId) return;
     const time = Number(currentTime);
     if (!Number.isFinite(time) || time < 0) return;
+    const ts = Number(timestamp);
+    const tsValid = Number.isFinite(ts) && ts > 0;
+
+    room.playback = {
+      ...room.playback,
+      playing: Boolean(playing),
+      time,
+      updatedAt: tsValid ? ts : Date.now()
+    };
+
     socket.to(roomId).emit("film:sync", {
       currentTime: time,
       playing: Boolean(playing),
+      timestamp: tsValid ? ts : Date.now(),
       from: socket.id
     });
   });

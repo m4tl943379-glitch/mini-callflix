@@ -4,6 +4,7 @@ const DRIFT_SEEK_MS = 1000;        // reseek only when |drift| above this
 const DRIFT_HEARTBEAT_MS = 1500;
 const HEARTBEAT_MS = 8000;
 const AUTO_HIDE_MS = 2600;
+const SEEK_EMIT_THROTTLE_MS = 150;
 
 /* ── cinematic SVG icon set ── */
 function IconPlay({ w = 18, h = 18 }) {
@@ -99,13 +100,14 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   const ytPlayerRef = useRef(null);
   const videoRef = useRef(null);
   const mirrorRef = useRef(false);     // while true, don't re-emit player events
+  const lastSeenTsRef = useRef(0);     // newest peer timestamp applied (staleness guard)
+  const seekThrottleRef = useRef({ timer: null, value: null });
   const appliedInitialRef = useRef(false);
   const initialRef = useRef(playback || null);
   const startedRef = useRef(started);
   const playingRef = useRef(false);
   const volumeRef = useRef(100);
   const soloRef = useRef(solo);
-  const seekTimer = useRef(null);
   const clickTimer = useRef(null);
   const hideTimerRef = useRef(null);
 
@@ -188,14 +190,24 @@ const MoviePlayer = forwardRef(function MoviePlayer(
 
   useEffect(() => {
     if (!io) return;
-    const onAction = ({ type, currentTime, from }) => {
+    const onAction = ({ type, currentTime, from, timestamp }) => {
       if (soloRef.current) return;
       if (from && selfId && from === selfId) return;
+      const ts = Number(timestamp);
+      if (Number.isFinite(ts) && ts > 0) {
+        if (ts < lastSeenTsRef.current) return;
+        lastSeenTsRef.current = ts;
+      }
       applyRemote(type, currentTime);
     };
-    const onSync = ({ currentTime, playing: remotePlaying, from }) => {
+    const onSync = ({ currentTime, playing: remotePlaying, from, timestamp }) => {
       if (soloRef.current) return;
       if (from && selfId && from === selfId) return;
+      const ts = Number(timestamp);
+      if (Number.isFinite(ts) && ts > 0) {
+        if (ts < lastSeenTsRef.current) return;
+        lastSeenTsRef.current = ts;
+      }
       recalcSync(currentTime, remotePlaying);
     };
     io.on("film:action", onAction);
@@ -273,6 +285,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
             } else if (st === window.YT.PlayerState.ENDED) {
               setPlaying(false);
               onPlayback?.(false, getCur());
+              if (!mirrorRef.current) emitAction("pause", getCur());
             }
           },
           onError: () => {
@@ -301,9 +314,12 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   }, [youtubeId, ytReady]);
 
   useEffect(() => {
-    if (!io || !roomId || !youtubeId || solo) return;
+    if (!io || !roomId || solo) return;
     const iv = setInterval(() => {
-      if (!ytReady) return;
+      const ready = youtubeId
+        ? ytReady
+        : Boolean(videoRef.current && Number.isFinite(videoRef.current.duration) && videoRef.current.duration > 0);
+      if (!ready) return;
       io.emit("film:sync", {
         roomId,
         currentTime: getCur(),
@@ -375,8 +391,18 @@ const MoviePlayer = forwardRef(function MoviePlayer(
     const t = Number(value);
     setProg((p) => ({ ...p, cur: t }));
     doSeek(t);
+    const th = seekThrottleRef.current;
+    if (th.timer) {
+      th.value = t;
+      return;
+    }
     emitAction("seek", t);
-    clearTimeout(seekTimer.current);
+    th.timer = setTimeout(() => {
+      th.timer = null;
+      const v = th.value;
+      th.value = null;
+      if (v !== null) emitAction("seek", v);
+    }, SEEK_EMIT_THROTTLE_MS);
   }
 
   function onVolumeChange(value) {
@@ -460,6 +486,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
           onEnded={() => {
             setPlaying(false);
             onPlayback?.(false, videoRef.current?.currentTime || 0);
+            if (!mirrorRef.current) emitAction("pause", videoRef.current?.currentTime || 0);
           }}
         />
       )}
