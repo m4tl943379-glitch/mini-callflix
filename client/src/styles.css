@@ -106,7 +106,7 @@ button { cursor: pointer; }
 .actions { display: flex; gap: 14px; justify-content: center; margin-top: 38px; position: relative; }
 
 /* shared button tokens — premium micro-interactions */
-.primary, .secondary, .invite-box button:not(.cf-intro-btn), .chat-form button {
+.primary, .secondary, .invite-box button, .chat-form button {
   border: 0; border-radius: var(--r-m); padding: 13px 22px; color: #fff;
   transition: transform var(--m-fast) var(--ease), box-shadow var(--m-mid) var(--ease),
               background var(--m-mid) var(--ease), filter var(--m-mid) var(--ease);
@@ -763,96 +763,6 @@ button { cursor: pointer; }
   to { opacity: 1; transform: none; }
 }
 @keyframes cfCamIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-
-/* ───────── intro overlay (start movie transition) ───────── */
-.intro-overlay {
-  position: fixed; inset: 0; z-index: 80;
-  display: flex; align-items: center; justify-content: center;
-  background:
-    radial-gradient(120% 90% at 50% 20%, rgba(140, 10, 22, .14), transparent 55%),
-    rgba(6, 6, 8, .96);
-  animation: introFade 3.4s var(--ease) forwards;
-}
-.intro-message {
-  color: #f0eef0; font-size: clamp(18px, 2.3vw, 27px); font-weight: 400;
-  letter-spacing: .015em; line-height: 1.65; text-align: center;
-  max-width: 640px; padding: 0 28px;
-  text-shadow: 0 2px 22px rgba(0, 0, 0, .8);
-  animation: introTextIn .8s var(--ease) forwards;
-}
-.intro-heart { animation: introHeart 1.7s var(--ease) infinite; display: inline-block; }
-@keyframes introFade {
-  0% { opacity: 0; } 11% { opacity: 1; } 84% { opacity: 1; } 100% { opacity: 0; }
-}
-@keyframes introTextIn { from { opacity: 0; transform: translateY(14px); filter: blur(4px); } to { opacity: 1; transform: none; filter: blur(0); } }
-@keyframes introHeart { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.22); } }
-
-/* ───────── SALMA cinematic experience (intro, time capsule) ───────── */
-.cf-intro {
-  position: fixed; inset: 0; z-index: 90;
-  display: flex; align-items: center; justify-content: center;
-  text-align: center; overflow: hidden;
-  color: #fff;
-  background:
-    radial-gradient(120% 90% at 50% 18%, rgba(120, 8, 8, .22), transparent 60%),
-    radial-gradient(85% 60% at 50% 96%, rgba(10, 10, 14, .92), transparent 72%),
-    linear-gradient(180deg, #050507 0%, #0a0a0f 55%, #050507 100%);
-  animation: cfFadeIn .6s var(--ease);
-}
-.cf-cine-grain {
-  position: absolute; inset: 0; opacity: .05; pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-.cf-intro-core {
-  position: relative; z-index: 1;
-  max-width: 740px; padding: 0 28px;
-  display: flex; flex-direction: column; align-items: center; gap: 28px;
-}
-.cf-line {
-  margin: 0;
-  font-size: clamp(21px, 3.4vw, 34px); font-weight: 300;
-  letter-spacing: .03em; line-height: 1.35;
-  opacity: 0; text-shadow: 0 0 26px rgba(255, 40, 40, .18);
-  animation: cfIntroIn 1.2s ease both; animation-delay: var(--d);
-}
-.cf-message {
-  margin: 0; max-width: 640px;
-  font-size: clamp(17px, 2.6vw, 24px); font-style: italic; font-weight: 400;
-  line-height: 1.6; color: #ffd9d9;
-  opacity: 0; text-shadow: 0 0 34px rgba(255, 60, 60, .28);
-  animation: cfIntroIn 1.5s ease both; animation-delay: var(--d);
-}
-.cf-intro-btn {
-  appearance: none; cursor: pointer;
-  border: 1px solid rgba(255, 60, 60, .55);
-  background: rgba(255, 50, 50, .08);
-  color: #ffb3b3; font-family: inherit; font-size: 14px;
-  letter-spacing: .1em; text-transform: uppercase;
-  padding: 14px 32px; border-radius: var(--r-full);
-  box-shadow: 0 0 20px rgba(255, 50, 50, .14), inset 0 0 20px rgba(255, 50, 50, .06);
-  opacity: 0; animation: cfIntroIn 1s ease both; animation-delay: var(--d);
-  transition: transform .3s ease, box-shadow .3s ease, background .3s ease, color .3s ease;
-}
-.cf-intro-btn:hover {
-  transform: translateY(-2px) scale(1.04);
-  background: rgba(255, 60, 60, .18); color: #fff;
-  box-shadow: 0 0 40px rgba(255, 50, 50, .32), inset 0 0 26px rgba(255, 50, 50, .1);
-}
-.cf-intro-btn:active { transform: translateY(0) scale(.99); }
-@keyframes cfIntroIn { from { opacity: 0; transform: translateY(14px); filter: blur(5px); } to { opacity: 1; transform: none; filter: blur(0); } }
-.cf-particles { position: absolute; inset: 0; pointer-events: none; }
-.cf-particle {
-  position: absolute; width: 2px; height: 2px; border-radius: 50%;
-  background: rgba(255, 220, 220, .55);
-  box-shadow: 0 0 7px rgba(255, 80, 80, .8);
-  opacity: 0; animation: cfFloat ease-in-out infinite;
-}
-@keyframes cfFloat {
-  0%, 100% { opacity: 0; transform: translate(0, 0); }
-  25% { opacity: .55; }
-  55% { transform: translate(9px, -38px); opacity: .25; }
-  80% { opacity: .15; }
-}
 
 /* ───────── feeling system ───────── */
 .feel-wrap { position: relative; }

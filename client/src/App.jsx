@@ -148,7 +148,6 @@ function App() {
   const [movieStarted, setMovieStarted] = useState(false); // hides pre-start scene topbar
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [chatOpen, setChatOpen] = useState(true);
-  const [introOverlay, setIntroOverlay] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [camSide, setCamSide] = useState("right"); // fullscreen 80/20: "right" | "left"
   const [sideSwitching, setSideSwitching] = useState(false); // chat icon fades during side transition
@@ -158,7 +157,6 @@ function App() {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [partnerLeftAlert, setPartnerLeftAlert] = useState(false);
   const [soloMode, setSoloMode] = useState(false);
-  const [introStep, setIntroStep] = useState("idle"); // idle | intro | capsule | done
   const [feelingOpen, setFeelingOpen] = useState(false);
   const [feelText, setFeelText] = useState("");
   const [feelToast, setFeelToast] = useState(null);
@@ -213,11 +211,6 @@ function App() {
     () => roomId ? `${window.location.origin}/room/${roomId}` : "",
     [roomId]
   );
-
-  const isSalmaMode = useMemo(() => {
-    const n = (name || "").toLowerCase();
-    return n.includes("salma") || n.includes("sisi") || n.includes("sousou");
-  }, [name]);
 
   const pathRoomId = window.location.pathname.startsWith("/room/")
     ? window.location.pathname.split("/room/")[1]
@@ -408,7 +401,6 @@ function App() {
       setUnreadMsgs(0);
       setLinkInput("");
       setMovieUrl(MOVIE_SRC);
-      setIntroStep("idle");
       setFeelingOpen(false);
       setFeelClosing(false);
       setFeelText("");
@@ -452,12 +444,6 @@ function App() {
       socket.off("movie:start", onMovieStart);
     };
   }, [role, roomId]);
-
-  useEffect(() => {
-    if (!isSalmaMode || introStep !== "idle" || roomState?.count !== 2) return;
-    const t = setTimeout(() => setIntroStep("intro"), 400);
-    return () => clearTimeout(t);
-  }, [isSalmaMode, introStep, roomState?.count]);
 
   async function flushCandidates() {
     for (const candidate of pendingCandidates.current) {
@@ -769,21 +755,7 @@ function toggleReady() {
     closeFeelingMenu();
   }
 
-  function openSurprise() {
-    setIntroStep("capsule");
-  }
-
-  function startMovieFromCapsule() {
-    setMovieStarted(true);
-    setIntroStep("done");
-    setIntroOverlay(true);
-    setTimeout(() => {
-      setIntroOverlay(false);
-      playerRef.current?.play();
-    }, 3400);
-  }
-
-function stopLocalMedia() {
+  function stopLocalMedia() {
     localStream.current?.getTracks().forEach((t) => t.stop());
     localStream.current = null;
     if (localVideo.current) localVideo.current.srcObject = null;
@@ -854,7 +826,6 @@ function stopLocalMedia() {
     setMessages([]);
     setUnreadMsgs(0);
     setLinkInput("");
-    setIntroStep("idle");
     setFeelingOpen(false);
     setFeelClosing(false);
     setFeelText("");
@@ -934,7 +905,6 @@ setRoomId("");
     setRoomState(null);
     setPlayback(null);
     setNotice("");
-    setIntroStep("idle");
     setFeelingOpen(false);
     setFeelClosing(false);
     setFeelText("");
@@ -1593,14 +1563,6 @@ setRoomId("");
         </div>
       )}
 
-      {introOverlay && (
-        <div className="intro-overlay">
-          <div className="intro-message">
-            For the next two hours, it&rsquo;s just you, me, and our little world.{" "}
-            <span className="intro-heart">❤️🎬</span>
-          </div>
-        </div>
-      )}
       {showLeaveConfirm && (
         <div className="cf-modal-backdrop" onClick={() => setShowLeaveConfirm(false)}>
           <div className="cf-modal" onClick={(e) => e.stopPropagation()}>
@@ -1622,46 +1584,6 @@ setRoomId("");
               <button className="primary" onClick={continueWatchingSolo}>Continue Watching</button>
               <button className="ghost" onClick={confirmLeaveRoom}>Leave Room</button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {isSalmaMode && (introStep === "intro" || introStep === "capsule") && (
-        <div className="cf-intro">
-          <div className="cf-cine-grain" />
-          <div className="cf-particles">
-            {Array.from({ length: 9 }).map((_, i) => (
-              <span
-                key={i}
-                className="cf-particle"
-                style={{
-                  left: `${(i * 13 + 6) % 92}%`,
-                  top: `${28 + ((i * 17) % 46)}%`,
-                  animationDuration: `${5 + (i % 3) * 2}s`,
-                  animationDelay: `${i * 0.9}s`
-                }}
-              />
-            ))}
-          </div>
-          <div className="cf-intro-core">
-            {introStep === "intro" && (
-              <>
-                <p className="cf-line" style={{ "--d": "0.3s" }}>Before we travel through time…</p>
-                <p className="cf-line" style={{ "--d": "3.8s" }}>I wanted to leave something here for you.</p>
-                <p className="cf-line" style={{ "--d": "7.6s" }}>Tonight isn't just about the movie.</p>
-                <button className="cf-intro-btn" style={{ "--d": "11.4s" }} onClick={openSurprise}>Open your surprise ❤️</button>
-              </>
-            )}
-            {introStep === "capsule" && (
-              <>
-                <p className="cf-line" style={{ "--d": "0.3s" }}>Some moments become memories.</p>
-                <p className="cf-line" style={{ "--d": "3.8s" }}>Some memories become forever.</p>
-                <p className="cf-message" style={{ "--d": "7.6s" }}>
-                  salma mahma tbdlt layem o wa9t, fma hajet nhebhom yab9ou nafshom, nhebek barcha doctourtyy 🥹🥹❤️
-                </p>
-                <button className="cf-intro-btn" style={{ "--d": "12.4s" }} onClick={startMovieFromCapsule}>Start Movie</button>
-              </>
-            )}
           </div>
         </div>
       )}

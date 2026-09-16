@@ -349,7 +349,7 @@ io.on("connection", (socket) => {
     socket.to(roomId).emit("reaction:show", { reaction, id: crypto.randomUUID() });
   });
 
-  // Private "feeling" signal between the two members (Salma experience).
+  // Private "feeling" signal between the two members.
   socket.on("feel:send", ({ roomId, value }) => {
     if (socket.data.roomId !== roomId) return;
     const text = String(value || "").trim().slice(0, 120);
