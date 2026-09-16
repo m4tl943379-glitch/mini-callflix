@@ -194,7 +194,7 @@ io.on("connection", (socket) => {
     ack?.({ ok: true, roomId, role: "host", state: publicState(room) });
   });
 
-  socket.on("room:join", ({ roomId, name }, ack) => {
+  socket.on("room:join", ({ roomId, name, asHost }, ack) => {
     const id = String(roomId || "").trim();
     const room = rooms.get(id);
 
@@ -202,15 +202,26 @@ io.on("connection", (socket) => {
     if (participantCount(room) >= 2) return ack?.({ ok: false, error: "ROOM_FULL" });
 
     const cleanName = String(name || "Guest").trim().slice(0, 30) || "Guest";
-    room.guest = { socketId: socket.id, name: cleanName };
+
+    // Auto-rejoin support: a client whose socket dropped and whose previous role
+    // was "host" (asHost=true) is restored into the (empty) host slot. Normal
+    // joins keep the historical behavior and always occupy the guest slot.
+    let role = "guest";
+    if (asHost === true && !room.host) {
+      room.host = { socketId: socket.id, name: cleanName };
+      role = "host";
+    } else {
+      room.guest = { socketId: socket.id, name: cleanName };
+    }
+
     socket.join(id);
     socket.data.roomId = id;
-    socket.data.role = "guest";
+    socket.data.role = role;
     cancelRoomCleanup(id);
 
-    ack?.({ ok: true, roomId: id, role: "guest", state: publicState(room) });
+    ack?.({ ok: true, roomId: id, role, state: publicState(room) });
     socket.to(id).emit("room:participant-joined", {
-      participant: { name: cleanName, role: "guest" },
+      participant: { name: cleanName, role },
       state: publicState(room)
     });
   });

@@ -179,6 +179,12 @@ function App() {
   const hasLeftRef = useRef(false);
   const partnerLeftHandledRef = useRef(false);
   const isCleaningUpRef = useRef(false);
+  const roomIdRef = useRef(""); // current room id (socket-level), for auto-rejoin after a socket drop
+  const nameRef = useRef(""); // latest display name, reused for the rejoin payload
+  const prevRoleRef = useRef(""); // role at the moment the socket dropped (host stays host)
+  const rejoinScheduledRef = useRef(false); // true between socket "disconnect" and successful rejoin
+  const rejoinInFlightRef = useRef(false); // guards against duplicate room:join emissions
+  const onReconnectRef = useRef(null); // latest reconnect handler (avoids stale closures in the [] effect)
 
   const localVideo = useRef(null);
   const remoteVideo = useRef(null);
@@ -225,11 +231,40 @@ function App() {
   }, [pathRoomId]);
 
   useEffect(() => {
-    const onConnect = () => setSocketId(socket.id);
+    const onConnect = () => {
+      setSocketId(socket.id);
+      const act = onReconnectRef.current;
+      if (act) act();
+    };
+    const onDisconnect = (reason) => {
+      // Only arm the auto-rejoin if we're inside a room and did NOT leave on purpose.
+      if (roomIdRef.current && !hasLeftRef.current && !isCleaningUpRef.current) {
+        prevRoleRef.current = roleRef.current;
+        rejoinScheduledRef.current = true;
+        console.log(`[socket] disconnected (${reason || "unknown"}) — auto-rejoin armed for room ${roomIdRef.current}`);
+      } else {
+        console.log("[socket] disconnected");
+      }
+      setSocketId(null);
+    };
     socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
     if (socket.connected) setSocketId(socket.id);
-    return () => socket.off("connect", onConnect);
+    return () => {
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+    };
   }, []);
+
+  // Keep the reconnect action pointing at the freshest closure (refs stay valid,
+  // but rejoinRoom/startPeer read roomId from state — so the latest render wins).
+  useEffect(() => {
+    onReconnectRef.current = () => {
+      if (!rejoinScheduledRef.current || !roomIdRef.current) return;
+      console.log("[socket] reconnected — rejoining room", roomIdRef.current);
+      rejoinRoom(roomIdRef.current);
+    };
+  });
 
   // Autoplay policies block remote video with sound until a user gesture.
   // If the muted fallback kicked in, restore the call audio on first interaction.
@@ -252,6 +287,8 @@ function App() {
   useEffect(() => { chatOpenRef.current = chatOpen; }, [chatOpen]);
   useEffect(() => { sidebarOpenRef.current = sidebarOpen; }, [sidebarOpen]);
   useEffect(() => { roleRef.current = role; }, [role]);
+  useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
+  useEffect(() => { nameRef.current = name; }, [name]);
 
   // Reading the chat clears the unread badge.
   useEffect(() => {
@@ -361,6 +398,9 @@ function App() {
       clearTimeout(reconnectTimer.current);
       connectionLost.current = false;
       setRoomId("");
+      roomIdRef.current = "";
+      rejoinScheduledRef.current = false;
+      rejoinInFlightRef.current = false;
       setRoomState(null);
       setPlayback(null);
       setMovieStarted(false);
@@ -477,6 +517,7 @@ function App() {
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
       if (s === "connected") {
+        console.log("[webrtc] connection restored");
         restartAttempts.current = 0;
         setIceInfo("Connected");
         setTimeout(() => refreshIceInfo(pc), 500);
@@ -582,6 +623,10 @@ function App() {
     setError("");
     const cleanName = name.trim();
     if (!cleanName) return setError("Enter a display name.");
+    rejoinScheduledRef.current = false;
+    rejoinInFlightRef.current = false;
+    roomIdRef.current = nextRoomId;
+    nameRef.current = cleanName;
     setRoomId(nextRoomId);
 
     const event = nextRole === "host" ? "room:create" : "room:join";
@@ -760,6 +805,49 @@ function stopLocalMedia() {
     connectionLost.current = false;
   }
 
+  // Socket.IO auto-rejoin: when the transport drops (Wi-Fi → 4G handoff, proxy
+  // blip, …) the socket reconnects on its own; we re-enter the SAME room via
+  // room:join (restoring the host slot with asHost when we were the host) and
+  // let the existing startPeer / ICE-restart machinery rebuild the call.
+  async function rejoinRoom(rejoinRoomId) {
+    if (rejoinInFlightRef.current) return;
+    rejoinInFlightRef.current = true;
+    const prevRole = prevRoleRef.current || role;
+    rejoinScheduledRef.current = false;
+    console.log(`[socket] rejoin started: room=${rejoinRoomId} role=${prevRole}`);
+
+    socket.emit("room:join", {
+      roomId: rejoinRoomId,
+      name: nameRef.current || name || "Guest",
+      asHost: prevRole === "host"
+    }, async (result) => {
+      if (!result?.ok) {
+        const err = result?.error || "unknown";
+        console.log(`[socket] rejoin failed: ${err}`);
+        rejoinInFlightRef.current = false;
+        backToHome();
+        return;
+      }
+      setRole(result.role);
+      setRoomId(result.roomId);
+      roomIdRef.current = result.roomId;
+      setRoomState(result.state);
+      setMovieUrl(result.state?.movieUrl || MOVIE_SRC);
+      setPlayback(result.state?.playback || null);
+      applyReady(result.state?.ready, result.role);
+      partnerLeftHandledRef.current = false;
+      setPartnerLeftAlert(false);
+      console.log("[socket] rejoin succeeded — room:", result.roomId);
+      if (result.role === "host" && result.state?.count === 2) {
+        console.log("[webrtc] re-establishing call as host (offerer)");
+        await startPeer(true);
+      } else {
+        console.log("[webrtc] rejoin ok — waiting for host offer / restart");
+      }
+      rejoinInFlightRef.current = false;
+    });
+  }
+
   function resetRoomUi() {
     setPlayback(null);
     setMovieStarted(false);
@@ -786,6 +874,9 @@ function stopLocalMedia() {
     setSoloMode(false);
     resetRoomUi();
     setRoomId("");
+    roomIdRef.current = "";
+    rejoinScheduledRef.current = false;
+    rejoinInFlightRef.current = false;
     setRoomState(null);
     setView("home");
     setNotice("");
@@ -807,6 +898,9 @@ function stopLocalMedia() {
     setPartnerLeftAlert(false);
     resetRoomUi();
     setRoomId("");
+    roomIdRef.current = "";
+    rejoinScheduledRef.current = false;
+    rejoinInFlightRef.current = false;
     setRoomState(null);
     setView("thanks");
     setNotice("");
@@ -834,6 +928,9 @@ function stopLocalMedia() {
     closePeerConnection();
     setIceInfo("");
 setRoomId("");
+    roomIdRef.current = "";
+    rejoinScheduledRef.current = false;
+    rejoinInFlightRef.current = false;
     setRoomState(null);
     setPlayback(null);
     setNotice("");
@@ -928,6 +1025,7 @@ setRoomId("");
     if (Date.now() - lastRestart.current < 3000) return;
     lastRestart.current = Date.now();
     restartAttempts.current += 1;
+    console.log("[webrtc] renegotiation started");
     try {
       pc.restartIce?.();
       const offer = await pc.createOffer({ iceRestart: true });
