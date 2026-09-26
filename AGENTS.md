@@ -29,11 +29,12 @@ Vérification syntaxe serveur : `node --check server/server.js`.
 | Variable | Défaut | Usage |
 |---|---|---|
 | `PORT` | 3001 | Port du serveur (Render injecte le sien) |
-| `CLIENT_ORIGIN` | http://localhost:5173 | Origine CORS autorisée pour Socket.IO/Express |
+| `CLIENT_ORIGIN` | http://localhost:5173 | Origines CORS autorisées (Express + Socket.IO), **liste séparée par virgules** : ex. `https://mini-callflix.vercel.app,http://localhost:5173` (jamais `*`) |
 | `VITE_SERVER_URL` | http://localhost:3001 | URL du serveur Socket.IO **côté client** (à la construction) |
 | `CUSTOM_TURN_URLS` (deprecated : `VITE_TURN_URLS`) | (vide) | Liste `,` de serveurs TURN supplémentaires (`turn:host:port?transport=tcp`) |
 | `STUN_URLS` | Google x2 + Cloudflare + OpenRelay | Liste `,` de serveurs STUN **côté serveur** (`/api/ice-config`) |
-| `TURN_URLS` / `TURN_USERNAME` / `TURN_CREDENTIAL` | (vides → OpenRelay par défaut) | TURN **côté serveur** ; servi via `/api/ice-config`, sans rebuild du client |
+| `TURN_URLS` / `TURN_USERNAME` / `TURN_CREDENTIAL` | (vides → Twilio/openrelay fallback) | TURN **côté serveur** ; servi via `/api/ice-config`, sans rebuild du client |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | (vides) | Compte **Twilio NTS** : génère des creds **éphémères** à chaque requête (`username = sid:expiry`, `credential = HMAC-SHA1 base64`, TTL `TWILIO_TTL_SECONDS` = 3600 par défaut), prévaut sur `TURN_URLS`. `server.js` charge aussi un `.env` racine (gitignoré) sans écraser les vars Render. Changer de compte = changer ces 2 vars. |
 | `ROOM_IDLE_TTL_MS` | 1800000 (30 min) | TTL de nettoyage d'une room laissée avec 1 seul participant |
 | `MOVIE_SOURCE_URL` | release GitHub `m4tl943379-glitch/callflix-movie` | URL mp4 source du proxy `/movie/movie.mp4` (re-servie en `video/mp4` + Range pour le lecteur `<video>` ; GitHub renvoie de l'octet-stream sinon) |
 
@@ -62,9 +63,10 @@ Règles serveur : max 2 participants par room ; les URL de film n'acceptent que 
 
 ## Déploiement
 
-- Frontend → **Vercel** : import repo, variable build-time `VITE_SERVER_URL` = URL Render, build `npm run build`, output `dist` (câblé par `vercel.json`). Le workflow CI passe `VERCEL_TOKEN` via `env:` et épingler `vercel@59.16.0` (les CLI vercel ≥59 refusent les tokens `vca_` passés par `--token`) ; sinon le step « Deploy to Vercel » échoue sans erreur visible.
-- Serveur → **Render** : Blueprint `render.yaml` (npm install + npm start). WebSockets OK. Free tier : le service s'endort après ~15 min d'inactivité.
-- Vérifier `CLIENT_ORIGIN` sur Render = URL Vercel exacte, sinon CORS bloque le frontend.
+- Frontend → **Vercel** : import repo, variable build-time `VITE_SERVER_URL` = URL Render, build `npm run build`, output `dist` (câblé par `vercel.json`). Le workflow CI passe `VERCEL_TOKEN` via `env:` et épingler `vercel@59.16.0` (les CLI vercel ≥59 refusent les tokens `vca_` passés par `--token`) ; sinon le step « Deploy to Vercel » échoue sans erreur visible. **`VITE_SERVER_URL` n'est plus codée en dur dans `deploy.yml`** : le workflow lit la **variable de repo GitHub Actions `vars.VITE_SERVER_URL`** et échoue explicitement (fail-fast) si elle est vide — à définir sous Settings → Secrets and variables → Actions → Variables avec l'URL Render exacte.
+- Serveur → **Render** : Blueprint `render.yaml` (npm install + npm start, health `/health`). WebSockets OK. Free tier : le service s'endort après ~15 min d'inactivité. Le serveur écoute sur `0.0.0.0:$PORT` et `/health` renvoie `{ok, rooms, uptime}` (aucun secret).
+- Vérifier `CLIENT_ORIGIN` sur Render = URL Vercel exacte (liste `,**` possible), sinon CORS bloque le frontend.
+- **Changement de compte/workspace Render** : le repo ne contient aucune URL Render codée en dur (workflow = `vars.VITE_SERVER_URL`). Transfert : créer le service sur le nouveau compte (même `render.yaml` ou `npm install`/`npm start` + health `/health`), recréer les env vars du tableau ci-dessus, puis mettre à jour `vars.VITE_SERVER_URL` (GitHub) **et** `VITE_SERVER_URL` côté Vercel. `.env.example` documente toutes les variables ; `.env` local reste gitignoré.
 
 ## Limites connues
 

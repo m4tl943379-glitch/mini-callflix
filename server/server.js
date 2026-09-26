@@ -4,16 +4,36 @@ import cors from "cors";
 import { Server } from "socket.io";
 import crypto from "crypto";
 import { Readable } from "stream";
+import { readFileSync } from "fs";
 
 const PORT = process.env.PORT || 3001;
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
+// Comma-separated list of allowed browser origins (Vercel production URL and/or
+// local dev). Never use "*" — both Express CORS and Socket.IO must be explicit.
+const CLIENT_ORIGINS = (process.env.CLIENT_ORIGIN || "http://localhost:5173")
+  .split(",").map((s) => s.trim()).filter(Boolean);
+
+/* Lightweight .env loader (no dependency): fills process.env from the file next
+   to the repo, but never overrides a variable already set by the host (Render
+   dashboard vars win — they don't live in a file). */
+try {
+  const envLines = readFileSync(new URL("../.env", import.meta.url), "utf8").split(/\r?\n/);
+  for (const line of envLines) {
+    const m = /^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line);
+    if (!m) continue;
+    const key = m[1];
+    let value = m[2].trim();
+    if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+    else if (value.startsWith("'") && value.endsWith("'")) value = value.slice(1, -1);
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+} catch { /* no .env file — fine, pure env-var mode */ }
 
 const app = express();
-app.use(cors({ origin: CLIENT_ORIGIN }));
+app.use(cors({ origin: CLIENT_ORIGINS }));
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: CLIENT_ORIGIN, methods: ["GET", "POST"] }
+  cors: { origin: CLIENT_ORIGINS, methods: ["GET", "POST"] }
 });
 
 const rooms = new Map();
@@ -49,6 +69,7 @@ function createRoom() {
     movieUrl: "",
     ready: {},
     movieStarted: false,
+    seq: 0,
     playback: { playing: false, time: 0, updatedAt: Date.now() }
   });
   return id;
@@ -91,12 +112,42 @@ function publicState(room) {
   };
 }
 
-app.get("/health", (_req, res) => res.json({ ok: true, rooms: rooms.size }));
+/* Twilio Network Traversal Service (NTS) support. Twilio TURN credentials are
+   temporally-scoped: username = "<AccountSID>:<expiry-epoch>", password =
+   Base64(HMAC-SHA1(AuthToken, username)). Generated fresh on every call, so
+   they expire every TWILIO_TTL_SECONDS instead of being hardcoded forever.
+   Free-trial cap: 500 MB of TURN relayed traffic per account per month — switch
+   accounts by pointing TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN at the new one. */
+const TWILIO_ACCOUNT_SID = (process.env.TWILIO_ACCOUNT_SID || "").trim();
+const TWILIO_AUTH_TOKEN = (process.env.TWILIO_AUTH_TOKEN || "").trim();
+const TWILIO_TTL_SECONDS = Number(process.env.TWILIO_TTL_SECONDS) || 3600;
+const TWILIO_TURN_URLS = [
+  "turn:global.turn.twilio.com:3478?transport=udp",
+  "turn:global.turn.twilio.com:3478?transport=tcp",
+  "turns:global.turn.twilio.com:443?transport=tcp",
+  "turns:global.turn.twilio.com:5349?transport=tcp"
+];
+
+function twilioTurnConfig() {
+  const expiry = Math.floor(Date.now() / 1000) + TWILIO_TTL_SECONDS;
+  const username = `${TWILIO_ACCOUNT_SID}:${expiry}`;
+  const credential = crypto.createHmac("sha1", TWILIO_AUTH_TOKEN).update(username).digest("base64");
+  return { urls: TWILIO_TURN_URLS, username, credential };
+}
+
+app.get("/health", (_req, res) =>
+  res.json({ ok: true, rooms: rooms.size, uptime: Math.round(process.uptime()) })
+);
 
 function buildIceConfig() {
   const stuns = (process.env.STUN_URLS || "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302,stun:stun.cloudflare.com:3478")
     .split(",").map((s) => s.trim()).filter(Boolean);
   const iceServers = [{ urls: stuns }];
+
+  if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+    iceServers.push(twilioTurnConfig());
+    return iceServers;
+  }
 
   const turnUrls = (process.env.TURN_URLS || "").split(",").map((s) => s.trim()).filter(Boolean);
   if (turnUrls.length) {
@@ -136,7 +187,9 @@ app.get("/api/ice-config", (_req, res) => {
   res.json({ iceServers: buildIceConfig() });
 });
 
-if (process.env.TURN_URLS) {
+if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+  console.log(`[ice] Using Twilio NTS TURN with ephemeral credentials (TTL ${TWILIO_TTL_SECONDS}s).`);
+} else if (process.env.TURN_URLS) {
   const count = process.env.TURN_URLS.split(",").filter((s) => s.trim()).length;
   console.log(`[ice] Using configured TURN servers (${count} URL(s)) from environment (credentials kept server-side).`);
 } else {
@@ -286,6 +339,7 @@ io.on("connection", (socket) => {
       type,
       currentTime: time,
       timestamp: tsValid ? ts : Date.now(),
+      seq: ++room.seq,
       from: socket.id
     });
   });
@@ -310,6 +364,7 @@ io.on("connection", (socket) => {
       currentTime: time,
       playing: Boolean(playing),
       timestamp: tsValid ? ts : Date.now(),
+      seq: ++room.seq,
       from: socket.id
     });
   });
@@ -346,7 +401,7 @@ io.on("connection", (socket) => {
     if (socket.data.roomId !== roomId) return;
     const allowed = new Set(["❤️", "😂", "😱", "🔥"]);
     if (!allowed.has(reaction)) return;
-    socket.to(roomId).emit("reaction:show", { reaction, id: crypto.randomUUID() });
+    socket.to(roomId).emit("reaction:show", { reaction, id: crypto.randomUUID(), from: socket.id, role: socket.data.role });
   });
 
   // Private "feeling" signal between the two members.
@@ -402,6 +457,7 @@ function handleDisconnect(socket, explicitLeave) {
   scheduleRoomCleanup(roomId);
 }
 
-server.listen(PORT, () => {
-  console.log(`MINI CALLFLIX signaling server running on http://localhost:${PORT}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`MINI CALLFLIX signaling server listening on 0.0.0.0:${PORT}`);
+  console.log(`[cors] Allowed origins: ${CLIENT_ORIGINS.join(", ")}`);
 });

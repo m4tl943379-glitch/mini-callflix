@@ -6,7 +6,8 @@ export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
   plugins: [react()],
   server: {
-    port: 5173
+    port: 5173,
+    strictPort: true
   },
   publicDir: fileURLToPath(new URL("../public", import.meta.url)),
   build: {

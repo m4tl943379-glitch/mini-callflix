@@ -10,3 +10,4 @@ dist/
 public/movie/movie.mp4
 auth.pid
 .env*
+!.env.example

@@ -18,7 +18,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Require VITE_SERVER_URL (repo variable)
+        env:
+          VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
+        run: |
+          if [ -z "$VITE_SERVER_URL" ]; then
+            echo "::error::Repository variable VITE_SERVER_URL is not set. Add it under Settings > Secrets and variables > Actions > Variables with your Render backend URL (https://<your-service>.onrender.com)."
+            exit 1
+          fi
+
       - name: Deploy to Vercel (production)
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: npx vercel@59.16.0 --prod --yes --build-env VITE_SERVER_URL=https://mini-callflix-signal.onrender.com
+          VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
+        run: npx vercel@59.16.0 --prod --yes --build-env VITE_SERVER_URL="$VITE_SERVER_URL"

@@ -4,7 +4,8 @@ const DRIFT_SEEK_MS = 1000;        // reseek only when |drift| above this
 const DRIFT_HEARTBEAT_MS = 1500;
 const HEARTBEAT_MS = 8000;
 const AUTO_HIDE_MS = 2600;
-const SEEK_EMIT_THROTTLE_MS = 150;
+const SEEK_COALESCE_MS = 120;      // local seek apply+emit coalesced (latest wins)
+const SEEK_SETTLE_MS = 3000;       // ignore heartbeat position reseek after any seek for this long
 
 /* ── cinematic SVG icon set ── */
 function IconPlay({ w = 18, h = 18 }) {
@@ -91,7 +92,10 @@ function fmt(sec) {
 }
 
 const MoviePlayer = forwardRef(function MoviePlayer(
-  { url, playback, onPlayback, onToggleFullscreen, io, selfId, roomId, solo = false, started = false },
+  {
+    url, playback, onPlayback, onToggleFullscreen, io, selfId, roomId, solo = false, started = false,
+    onEnded, onMeta, syncHidden = false
+  },
   ref
 ) {
   const youtubeId = parseYouTubeId(url);
@@ -101,7 +105,11 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   const videoRef = useRef(null);
   const mirrorRef = useRef(false);     // while true, don't re-emit player events
   const lastSeenTsRef = useRef(0);     // newest peer timestamp applied (staleness guard)
-  const seekThrottleRef = useRef({ timer: null, value: null });
+  const lastSeqRef = useRef(0);        // newest server relays seq applied (global ordering, no clock skew)
+  const lastSeekAtRef = useRef(0);     // performance.now() when a seek was last applied (heartbeat settle)
+  const applySeekRef = useRef({ timer: null, value: null }); // local seek coalescing: latest value wins
+  const pendingPlayRef = useRef(null); // most recent video.play() promise — cancel on pause
+  const playDesiredRef = useRef(false); // latest desired play state (prevents stale play() overriding pause)
   const appliedInitialRef = useRef(false);
   const initialRef = useRef(playback || null);
   const startedRef = useRef(started);
@@ -110,6 +118,9 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   const soloRef = useRef(solo);
   const clickTimer = useRef(null);
   const hideTimerRef = useRef(null);
+  const onEndedRef = useRef(onEnded);
+  const onMetaRef = useRef(onMeta);
+  const syncProbeRef = useRef(null);   // last peer position sample { remoteTime, at } for the Same-Frame pill
 
   const [ytReady, setYtReady] = useState(false);
   const [ytError, setYtError] = useState(false);
@@ -120,11 +131,14 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   const [muted, setMuted] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [syncState, setSyncState] = useState(""); // "" | "ok" | "catchup"
 
   useEffect(() => { playingRef.current = playing; }, [playing]);
   useEffect(() => { volumeRef.current = volume; }, [volume]);
   useEffect(() => { soloRef.current = solo; }, [solo]);
   useEffect(() => { startedRef.current = started; }, [started]);
+  useEffect(() => { onEndedRef.current = onEnded; }, [onEnded]);
+  useEffect(() => { onMetaRef.current = onMeta; }, [onMeta]);
 
   const getCur = () =>
     (youtubeId && ytPlayerRef.current)
@@ -137,18 +151,31 @@ const MoviePlayer = forwardRef(function MoviePlayer(
       : (videoRef.current?.duration || 0);
 
   const doPlay = useCallback(() => {
-    if (youtubeId) ytPlayerRef.current?.playVideo?.();
-    else videoRef.current?.play?.().catch(() => {});
+    playDesiredRef.current = true;
+    if (youtubeId) { ytPlayerRef.current?.playVideo?.(); return; }
+    const el = videoRef.current;
+    if (!el || !el.paused) return;
+    const p = el.play();
+    if (p && typeof p.then === "function") { pendingPlayRef.current = p; p.catch(() => {}); }
   }, [youtubeId]);
 
   const doPause = useCallback(() => {
-    if (youtubeId) ytPlayerRef.current?.pauseVideo?.();
-    else videoRef.current?.pause?.();
+    playDesiredRef.current = false;
+    if (youtubeId) { ytPlayerRef.current?.pauseVideo?.(); return; }
+    const el = videoRef.current;
+    if (!el) return;
+    if (!el.paused) el.pause();
+    const pending = pendingPlayRef.current;
+    if (pending && typeof pending.then === "function") {
+      pending.then(() => { if (!playDesiredRef.current && !el.paused) el.pause(); }).catch(() => {});
+    }
+    pendingPlayRef.current = null;
   }, [youtubeId]);
 
   const doSeek = useCallback((t) => {
+    lastSeekAtRef.current = performance.now();
     if (youtubeId) ytPlayerRef.current?.seekTo?.(t, true);
-    else { const v = videoRef.current; if (v) v.currentTime = t; }
+    else { const v = videoRef.current; if (v) { try { v.currentTime = t; } catch {} } }
   }, [youtubeId]);
 
   const emitAction = useCallback((type, time) => {
@@ -180,7 +207,11 @@ const MoviePlayer = forwardRef(function MoviePlayer(
     if (!Number.isFinite(Number(remoteTime))) return;
     mirrorRef.current = true;
     try {
-      if (Math.abs(getCur() - Number(remoteTime)) > DRIFT_HEARTBEAT_MS / 1000) doSeek(Number(remoteTime));
+      // Settle guard: after any seek (local or remote), suppress heartbeat
+      // position reseek for SEEK_SETTLE_MS so a pre-seek heartbeat doesn't
+      // walk the player back off the newest seek.
+      const since = performance.now() - lastSeekAtRef.current;
+      if (since > SEEK_SETTLE_MS && Math.abs(getCur() - Number(remoteTime)) > DRIFT_HEARTBEAT_MS / 1000) doSeek(Number(remoteTime));
       if (remotePlaying && !playingRef.current) doPlay();
       else if (!remotePlaying && playingRef.current) doPause();
     } finally {
@@ -188,9 +219,27 @@ const MoviePlayer = forwardRef(function MoviePlayer(
     }
   }, [youtubeId, doPlay, doPause, doSeek]);
 
+  /* Coalesce rapid local seeks (slider drag, repeated +10/−10 clicks) so
+     the DOM element / YouTube API gets one apply+emit per SEEK_COALESCE_MS.
+     The last value always wins — no accumulation, no stale-overwrite. */
+  const scheduleLocalSeek = useCallback((t) => {
+    const s = applySeekRef.current;
+    s.value = Number(t) || 0;
+    if (s.timer) return;
+    s.timer = setTimeout(() => {
+      s.timer = null;
+      const v = s.value;
+      s.value = null;
+      if (v !== null && Number.isFinite(v)) {
+        doSeek(v);
+        emitAction("seek", v);
+      }
+    }, SEEK_COALESCE_MS);
+  }, [doSeek, emitAction]);
+
   useEffect(() => {
     if (!io) return;
-    const onAction = ({ type, currentTime, from, timestamp }) => {
+    const onAction = ({ type, currentTime, from, timestamp, seq }) => {
       if (soloRef.current) return;
       if (from && selfId && from === selfId) return;
       const ts = Number(timestamp);
@@ -198,9 +247,15 @@ const MoviePlayer = forwardRef(function MoviePlayer(
         if (ts < lastSeenTsRef.current) return;
         lastSeenTsRef.current = ts;
       }
+      const sq = Number(seq);
+      if (Number.isFinite(sq) && sq > 0) {
+        if (sq <= lastSeqRef.current) return;
+        lastSeqRef.current = sq;
+      }
+      syncProbeRef.current = { remoteTime: Number(currentTime), at: Date.now() };
       applyRemote(type, currentTime);
     };
-    const onSync = ({ currentTime, playing: remotePlaying, from, timestamp }) => {
+    const onSync = ({ currentTime, playing: remotePlaying, from, timestamp, seq }) => {
       if (soloRef.current) return;
       if (from && selfId && from === selfId) return;
       const ts = Number(timestamp);
@@ -208,6 +263,12 @@ const MoviePlayer = forwardRef(function MoviePlayer(
         if (ts < lastSeenTsRef.current) return;
         lastSeenTsRef.current = ts;
       }
+      const sq = Number(seq);
+      if (Number.isFinite(sq) && sq > 0) {
+        if (sq <= lastSeqRef.current) return;
+        lastSeqRef.current = sq;
+      }
+      syncProbeRef.current = { remoteTime: Number(currentTime), at: Date.now() };
       recalcSync(currentTime, remotePlaying);
     };
     io.on("film:action", onAction);
@@ -240,8 +301,36 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   useImperativeHandle(ref, () => ({
     play: doPlay,
     pause: doPause,
-    currentTime: getCur
+    currentTime: getCur,
+    getVideoData: () => (ytPlayerRef.current && ytPlayerRef.current.getVideoData
+      ? ytPlayerRef.current.getVideoData()
+      : null)
   }), [doPlay, doPause, youtubeId]);
+
+  /* Same-Frame pill: derive drift purely from the LAST peer sample we already
+     receive through the existing film:action/film:sync stream (no extra events).
+     A 2s client-side poll flips the indicator only when drift really matters. */
+  useEffect(() => {
+    if (!io || !roomId || solo) { setSyncState(""); return; }
+    const iv = setInterval(() => {
+      const p = syncProbeRef.current;
+      if (!p || !Number.isFinite(Number(p.remoteTime))) return;
+      const drift = Math.abs(getCur() - Number(p.remoteTime));
+      const next = drift > DRIFT_HEARTBEAT_MS / 1000 ? "catchup" : "ok";
+      setSyncState((s) => (s === next ? s : next));
+    }, 2000);
+    return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [io, roomId, solo, youtubeId, ytReady, started]);
+
+  /* Real YouTube title (getVideoData) surfaced up for the lobby / title card. */
+  const notifyMeta = useCallback(() => {
+    const p = ytPlayerRef.current;
+    const vd = p && p.getVideoData ? p.getVideoData() : null;
+    if (vd && vd.title && String(vd.title).toLowerCase() !== "undefined") {
+      onMetaRef.current?.({ title: vd.title });
+    }
+  }, []);
 
   useEffect(() => {
     if (!youtubeId) return;
@@ -271,6 +360,8 @@ const MoviePlayer = forwardRef(function MoviePlayer(
             setYtReady(true);
             setYtError(false);
             applyInitial();
+            notifyMeta();
+            setTimeout(() => { if (!cancelled) notifyMeta(); }, 1600);
           },
           onStateChange: (event) => {
             const st = event.data;
@@ -278,6 +369,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
               setPlaying(true);
               onPlayback?.(true, getCur());
               if (!mirrorRef.current) emitAction("play", getCur());
+              notifyMeta();
             } else if (st === window.YT.PlayerState.PAUSED) {
               setPlaying(false);
               onPlayback?.(false, getCur());
@@ -286,6 +378,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
               setPlaying(false);
               onPlayback?.(false, getCur());
               if (!mirrorRef.current) emitAction("pause", getCur());
+              if (!mirrorRef.current) onEndedRef.current?.();
             }
           },
           onError: () => {
@@ -347,8 +440,8 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   function seekBy(delta) {
     const dur = getDur();
     const next = Math.min(Math.max(0, getCur() + delta), dur > 0 ? dur : Infinity);
-    doSeek(next);
-    emitAction("seek", next);
+    setProg((p) => ({ ...p, cur: next }));
+    scheduleLocalSeek(next);
   }
 
   /* ── cinematic auto-hide: show on any interaction, hide after idle while playing ── */
@@ -371,6 +464,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   }, [playing]);
 
   useEffect(() => () => clearTimeout(hideTimerRef.current), []);
+  useEffect(() => () => { if (applySeekRef.current?.timer) clearTimeout(applySeekRef.current.timer); }, []);
 
   /* Any pointer activity anywhere over the scene (movie, player bar AND the
      floating Camera/Mic/Reactions toolbar) shares the SAME visibility state,
@@ -390,19 +484,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
   function onSeekInput(value) {
     const t = Number(value);
     setProg((p) => ({ ...p, cur: t }));
-    doSeek(t);
-    const th = seekThrottleRef.current;
-    if (th.timer) {
-      th.value = t;
-      return;
-    }
-    emitAction("seek", t);
-    th.timer = setTimeout(() => {
-      th.timer = null;
-      const v = th.value;
-      th.value = null;
-      if (v !== null) emitAction("seek", v);
-    }, SEEK_EMIT_THROTTLE_MS);
+    scheduleLocalSeek(t);
   }
 
   function onVolumeChange(value) {
@@ -487,6 +569,7 @@ const MoviePlayer = forwardRef(function MoviePlayer(
             setPlaying(false);
             onPlayback?.(false, videoRef.current?.currentTime || 0);
             if (!mirrorRef.current) emitAction("pause", videoRef.current?.currentTime || 0);
+            if (!mirrorRef.current) onEndedRef.current?.();
           }}
         />
       )}
@@ -549,6 +632,12 @@ const MoviePlayer = forwardRef(function MoviePlayer(
           </div>
         </div>
       </div>
+
+      {started && !solo && !syncHidden && syncState && (
+        <div className={`sync-pill ${syncState}`} aria-hidden="true">
+          {syncState === "catchup" ? "Catching up…" : "In sync"}
+        </div>
+      )}
     </>
   );
 });

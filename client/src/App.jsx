@@ -67,6 +67,27 @@ const isMobileViewport = () => window.matchMedia("(max-width: 600px)").matches |
 const MOVIE_SRC = `${SERVER_URL}/movie/movie.mp4`;
 const socket = io(SERVER_URL, { autoConnect: true });
 
+/* Refresh recovery: the room identity survives a page reload in sessionStorage
+   (tab-scoped, so it never bleeds into other tabs / browser instances). */
+const SESSION_KEY = "cf:room";
+function readStoredSession() {
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s || typeof s.roomId !== "string" || !s.roomId) return null;
+    return s;
+  } catch { return null; }
+}
+function writeStoredSession(s) {
+  try { window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch {}
+}
+function clearStoredSession() {
+  try { window.sessionStorage.removeItem(SESSION_KEY); } catch {}
+}
+const REJOIN_MAX_ATTEMPTS = 5; // recovery retries for ROOM_FULL (old socket slot must free)
+const REJOIN_BACKOFF_MS = 700;
+
 const ICE_SERVERS = [
   { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun.cloudflare.com:3478"] },
   { urls: ["turn:openrelay.metered.ca:80?transport=udp", "turn:openrelay.metered.ca:80?transport=tcp", "turn:openrelay.metered.ca:443?transport=tcp"], username: "openrelayproject", credential: "openrelayproject" },
@@ -128,6 +149,148 @@ function feelingDisplay(value) {
   }
 }
 
+/* ── private-theater first batch helpers ── */
+const CINE_INTRO_MS = 2600;
+const CINE_INTRO_MS_REDUCED = 350;
+const SHOWER_MS = 1400;
+const MAX_SHOWERS = 3;
+
+function movieDisplayName(url) {
+  const u = String(url || "");
+  if (!u) return "Tonight's Feature";
+  if (/youtube\.|youtu\.be/i.test(u)) return "Tonight's Feature";
+  if (u === MOVIE_SRC || u.includes("/movie/movie.mp4")) return "My Movie";
+  return "Tonight's Feature";
+}
+
+function fmtDur(sec) {
+  if (!Number.isFinite(sec) || sec <= 0) return "";
+  const s = Math.floor(sec);
+  const m = Math.floor(s / 60);
+  if (m >= 60) return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+  return `${m} min`;
+}
+
+function wrapCanvasText(ctx, text, maxWidth) {
+  const words = String(text).split(/\s+/);
+  const lines = [];
+  let line = "";
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
+    if (ctx.measureText(test).width > maxWidth && line) { lines.push(line); line = w; }
+    else line = test;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+/* Client-side cinema closing card. Only real session facts are drawn. */
+function buildShareCard({ title, names, durationText, feelings, reactions, chats, roomId }) {
+  try {
+    const W = 1080, H = 1350;
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, "#12101a");
+    bg.addColorStop(0.55, "#0a090d");
+    bg.addColorStop(1, "#070608");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+    const glow = ctx.createRadialGradient(W / 2, H * 0.32, 40, W / 2, H * 0.32, 700);
+    glow.addColorStop(0, "rgba(140, 14, 24, .28)");
+    glow.addColorStop(1, "rgba(140, 14, 24, 0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+
+    const RED = "#e50914", TEXT = "#f5f1ee", MUTED = "#8f858c", DIM = "rgba(245, 241, 238, .6)";
+    ctx.textAlign = "center";
+
+    // brand
+    ctx.fillStyle = RED;
+    ctx.font = "700 34px Arial, sans-serif";
+    ctx.fillText("CALLFLIX", W / 2, 120);
+    ctx.fillStyle = MUTED;
+    ctx.font = "500 22px Georgia, serif";
+    ctx.fillText("the tiny private cinema for two", W / 2, 158);
+
+    // eyebrow + feature
+    ctx.fillStyle = DIM;
+    ctx.font = "500 26px Arial, sans-serif";
+    ctx.fillText("TONIGHT'S FEATURE", W / 2, 300);
+    const titleText = String(title || "Tonight's Feature").slice(0, 46);
+    ctx.fillStyle = TEXT;
+    ctx.font = "400 76px Georgia, 'Times New Roman', serif";
+    const titleLines = wrapCanvasText(ctx, titleText, W - 140);
+    titleLines.forEach((ln, i) => ctx.fillText(ln, W / 2, 392 + i * 88));
+
+    ctx.strokeStyle = "rgba(229, 9, 20, .55)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(W * 0.34, 618);
+    ctx.lineTo(W * 0.66, 618);
+    ctx.stroke();
+
+    let y = 690;
+    ctx.fillStyle = DIM;
+    ctx.font = "500 24px Arial, sans-serif";
+    ctx.fillText("WATCHED TOGETHER", W / 2, y); y += 46;
+    if (durationText) {
+      ctx.fillStyle = TEXT;
+      ctx.font = "600 40px Arial, sans-serif";
+      ctx.fillText(durationText, W / 2, y); y += 42;
+    }
+    if (names) {
+      ctx.fillStyle = "rgba(245, 241, 238, .85)";
+      ctx.font = "400 30px Georgia, serif";
+      const nl = wrapCanvasText(ctx, String(names).slice(0, 60), W - 160);
+      nl.forEach((ln) => { ctx.fillText(ln, W / 2, y); y += 44; });
+    }
+
+    const facts = [];
+    const feelKeys = feelings ? Object.keys(feelings) : [];
+    const feelCount = feelKeys.reduce((n, k) => n + feelings[k], 0);
+    if (feelCount > 0) facts.push(`${feelCount} feeling${feelCount > 1 ? "s" : ""} shared`);
+    if (reactions > 0) facts.push(`${reactions} reaction${reactions > 1 ? "s" : ""}`);
+    if (chats > 0) facts.push(`${chats} message${chats > 1 ? "s" : ""}`);
+    if (!facts.length) facts.push("a quiet night spent together");
+
+    ctx.fillStyle = DIM;
+    ctx.font = "500 26px Arial, sans-serif";
+    facts.slice(0, 3).forEach((f) => { ctx.fillText(f, W / 2, y); y += 42; });
+
+    ctx.fillStyle = "rgba(245, 241, 238, .55)";
+    ctx.font = "italic 400 30px Georgia, serif";
+    ctx.fillText("One more movie night together.", W / 2, 1010);
+
+    // ticket-style footer
+    ctx.strokeStyle = "rgba(255, 255, 255, .12)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([14, 16]);
+    ctx.beginPath();
+    ctx.moveTo(90, 1100);
+    ctx.lineTo(W - 90, 1100);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = MUTED;
+    ctx.font = "500 24px Arial, sans-serif";
+    if (roomId) ctx.fillText(`ROOM ${roomId}`, W / 2, 1160);
+    ctx.fillStyle = "rgba(229, 9, 20, .85)";
+    ctx.font = "700 40px Arial, sans-serif";
+    ctx.fillText("CALLFLIX", W / 2, 1246);
+    ctx.fillStyle = "rgba(245,241,238,.4)";
+    ctx.font = "500 22px Arial, sans-serif";
+    ctx.fillText("two people · one screen", W / 2, 1292);
+
+    return canvas.toDataURL("image/png");
+  } catch {
+    return null;
+  }
+}
+
 function App() {
   const [view, setView] = useState("home");
   const [name, setName] = useState("");
@@ -141,7 +304,6 @@ function App() {
   const [media, setMedia] = useState({ cameraEnabled: true, micEnabled: true });
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState("");
-  const [floatingReaction, setFloatingReaction] = useState(null);
   const [movieUrl, setMovieUrl] = useState(MOVIE_SRC);
   const [linkInput, setLinkInput] = useState("");
   const [playback, setPlayback] = useState(null);
@@ -167,6 +329,18 @@ function App() {
   const [readyPartner, setReadyPartner] = useState(false);
   const feelToastTimer = useRef(null);
   const feelCloseTimer = useRef(null);
+  const cineTimer = useRef(null);
+  const shareTimer = useRef(null);
+  const movieStartAtRef = useRef(0);
+  const wrapShownRef = useRef(false);
+  const sessionFactsRef = useRef({ feelings: {}, reactions: 0, chats: 0 });
+  const [movieTitle, setMovieTitle] = useState("");
+  const [cinemaIntro, setCinemaIntro] = useState(false);
+  const [reactionShowers, setReactionShowers] = useState([]);
+  const [wrapInfo, setWrapInfo] = useState(null);
+  const [hangoutMode, setHangoutMode] = useState(false);
+  const [shareUrl, setShareUrl] = useState(null);
+  const [shareStatus, setShareStatus] = useState("");
   const feelSentTimer = useRef(null);
   const iceWatchdogRef = useRef(null);
   const earlyCheckRef = useRef(null);
@@ -183,6 +357,9 @@ function App() {
   const rejoinScheduledRef = useRef(false); // true between socket "disconnect" and successful rejoin
   const rejoinInFlightRef = useRef(false); // guards against duplicate room:join emissions
   const onReconnectRef = useRef(null); // latest reconnect handler (avoids stale closures in the [] effect)
+  const rejoinRoomRef = useRef(null); // latest rejoinRoom (used by the refresh-recovery path)
+  const startPeerRef = useRef(null); // latest startPeer (fresh closures after a refresh rejoin)
+  const recoveryAttemptedRef = useRef(false); // run the refresh-recovery flow at most once per page load
 
   const localVideo = useRef(null);
   const remoteVideo = useRef(null);
@@ -282,6 +459,42 @@ function App() {
   useEffect(() => { roleRef.current = role; }, [role]);
   useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
   useEffect(() => { nameRef.current = name; }, [name]);
+  useEffect(() => { rejoinRoomRef.current = rejoinRoom; });
+  useEffect(() => { startPeerRef.current = startPeer; });
+
+  // Refresh recovery: a page reload loses all React state but the server keeps
+  // the room. If a previous session is stored AND the URL isn't pointing at a
+  // different room, rejoin with the saved role once the socket is connected.
+  // Runs after the rejoinRoomRef/startPeerRef assignments above so the latest
+  // closures are guaranteed to be in place even for the synchronous path.
+  useEffect(() => {
+    if (recoveryAttemptedRef.current) return;
+    const session = readStoredSession();
+    if (!session) return;
+    if (pathRoomId && pathRoomId !== session.roomId) return;
+    recoveryAttemptedRef.current = true;
+    prevRoleRef.current = session.role || "guest";
+    if (session.name) nameRef.current = session.name;
+    const attempt = () => {
+      console.log(`[recover] restoring room ${session.roomId} as ${prevRoleRef.current}`);
+      rejoinRoomRef.current?.(session.roomId, { recover: true });
+    };
+    if (socket.connected) attempt();
+    else socket.once("connect", attempt);
+  }, [pathRoomId]);
+  const roomStateRef = useRef(null);
+  const soloModeRef = useRef(false);
+  useEffect(() => { roomStateRef.current = roomState; }, [roomState]);
+  useEffect(() => { soloModeRef.current = soloMode; }, [soloMode]);
+
+  useEffect(() => {
+    setMovieTitle(movieDisplayName(movieUrl));
+    setShareUrl(null);
+    setShareStatus("");
+    wrapShownRef.current = false;
+  }, [movieUrl]);
+
+  useEffect(() => () => { clearTimeout(cineTimer.current); clearTimeout(shareTimer.current); }, []);
 
   // Reading the chat clears the unread badge.
   useEffect(() => {
@@ -306,12 +519,14 @@ function App() {
     };
 
     const onOffer = async ({ offer }) => {
-      if (!peer.current) await startPeer(false);
+      if (!peer.current) {
+        await startPeer(false);
+      }
       await peer.current.setRemoteDescription(offer);
       await flushCandidates();
       const answer = await peer.current.createAnswer();
       await peer.current.setLocalDescription(answer);
-      socket.emit("webrtc:answer", { roomId, answer });
+      socket.emit("webrtc:answer", { roomId: roomIdRef.current, answer });
     };
 
     const onAnswer = async ({ answer }) => {
@@ -335,17 +550,20 @@ function App() {
 
     const onChat = (item) => {
       setMessages((prev) => [...prev, item]);
+      sessionFactsRef.current.chats += 1;
       const fromOther = item.role && roleRef.current && item.role !== roleRef.current;
       if (!fromOther) return;
       if (!(sidebarOpenRef.current && chatOpenRef.current)) setUnreadMsgs((n) => n + 1);
     };
 
     const onReaction = ({ reaction, id }) => {
-      setFloatingReaction({ reaction, id });
-      setTimeout(() => setFloatingReaction(null), 1200);
+      sessionFactsRef.current.reactions += 1;
+      spawnReactionShower(reaction, "remote");
     };
 
     const onFeeling = ({ value, user }) => {
+      const k = String(value || "").trim();
+      if (k) sessionFactsRef.current.feelings[k] = (sessionFactsRef.current.feelings[k] || 0) + 1;
       clearTimeout(feelToastTimer.current);
       setFeelToast({
         id: Date.now(),
@@ -406,12 +624,23 @@ function App() {
       setFeelText("");
       setFeelToast(null);
       setFeelSent(false);
+      setCinemaIntro(false);
+      setWrapInfo(null);
+      setHangoutMode(false);
+      setShareUrl(null);
+      setShareStatus("");
+      wrapShownRef.current = false;
+      sessionFactsRef.current = { feelings: {}, reactions: 0, chats: 0 };
+      movieStartAtRef.current = 0;
+      clearTimeout(cineTimer.current);
+      clearTimeout(shareTimer.current);
       setView("home");
       window.history.replaceState({}, "", "/");
       hasLeftRef.current = false;
       partnerLeftHandledRef.current = false;
       setReadyMe(false);
       setReadyPartner(false);
+      clearStoredSession();
     };
 
     socket.on("room:participant-joined", onJoined);
@@ -498,7 +727,7 @@ function App() {
       if (remoteVideoOverlay.current) remoteVideoOverlay.current.srcObject = event.streams[0];
     };
     pc.onicecandidate = (event) => {
-      if (event.candidate) socket.emit("webrtc:ice", { roomId, candidate: event.candidate });
+      if (event.candidate) socket.emit("webrtc:ice", { roomId: roomIdRef.current, candidate: event.candidate });
     };
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
@@ -601,7 +830,7 @@ function App() {
     if (isOfferer) {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      socket.emit("webrtc:offer", { roomId, offer });
+      socket.emit("webrtc:offer", { roomId: roomIdRef.current, offer });
     }
   }
 
@@ -634,6 +863,8 @@ function App() {
       setMovieUrl((result.state?.movieUrl) || MOVIE_SRC);
       setPlayback(result.state?.playback || null);
       setView("room");
+      writeStoredSession({ roomId: result.roomId, name: cleanName, role: result.role, joinedAt: Date.now() });
+      window.history.replaceState({}, "", `/room/${result.roomId}`);
       applyReady(result.state?.ready, result.role);
       await getLocalMedia();
       if (result.role === "host") setNotice("Waiting for your friend...");
@@ -667,13 +898,98 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* Real seat names for the lobby / title card / recap. */
+  const seatNames = useCallback(() => {
+    const rs = roomStateRef.current;
+    const selfName = nameRef.current;
+    const hostN = rs?.host?.name || selfName;
+    const guestN = rs?.guest?.name || "";
+    return { hostN, guestN, isSolo: Boolean(soloModeRef.current) || !rs?.guest };
+  }, []);
+
+  /* YouTube title (real, from the player) surfaces for the lobby + title card. */
+  const handleVideoMeta = useCallback((videoInfo) => {
+    const t = videoInfo && videoInfo.title;
+    if (t && String(t).toLowerCase() !== "undefined") setMovieTitle(String(t));
+  }, []);
+
+  /* Reaction showers: spawn at the sender's camera presence and fly to the movie. */
+  const spawnReactionShower = useCallback((emoji, originType) => {
+    const scene = stageRef.current;
+    const id = (typeof crypto !== "undefined" && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const fallbackX = Math.max(40, (window.innerWidth || 800) - 56);
+    const fallbackY = Math.round((window.innerHeight || 600) * 0.42);
+    const sceneRect = scene && scene.getBoundingClientRect();
+    const sx = sceneRect && sceneRect.width ? sceneRect.left + sceneRect.width / 2 : Math.round((window.innerWidth || 800) / 2);
+    const sy = sceneRect && sceneRect.height ? sceneRect.top + sceneRect.height * 0.42 : Math.round((window.innerHeight || 600) / 2);
+    let ox = fallbackX;
+    let oy = fallbackY;
+    if (originType) {
+      const sel = originType === "self"
+        ? ".cam-chip.self, .camera-overlays .overlay-self"
+        : ".cam-chip.remote, .camera-overlays .overlay-remote";
+      const el = document.querySelector(sel);
+      if (el && el.getBoundingClientRect) {
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) { ox = r.left + r.width / 2; oy = r.top + r.height / 2; }
+      }
+    }
+    setReactionShowers((prev) => {
+      const next = [...prev, { id, emoji, x: ox, y: oy, dx: sx - ox, dy: sy - oy }];
+      return next.length > MAX_SHOWERS ? next.slice(next.length - MAX_SHOWERS) : next;
+    });
+    setTimeout(() => {
+      setReactionShowers((prev) => prev.filter((s) => s.id !== id));
+    }, SHOWER_MS);
+  }, []);
+
+  /* Real movie-end → cinematic wrap (never invents numbers: only session facts). */
+  const handleMovieEnded = useCallback(() => {
+    if (wrapShownRef.current) return;
+    wrapShownRef.current = true;
+    const facts = sessionFactsRef.current;
+    const { hostN, guestN, isSolo } = seatNames();
+    const durationSec = movieStartAtRef.current > 0
+      ? Math.max(0, Math.round((Date.now() - movieStartAtRef.current) / 1000))
+      : 0;
+    setHangoutMode(false);
+    setWrapInfo({
+      title: movieTitle || movieDisplayName(movieUrl),
+      durationSec,
+      feelings: Object.keys(facts.feelings).length ? { ...facts.feelings } : null,
+      reactions: facts.reactions,
+      chats: facts.chats,
+      solo: isSolo,
+      names: isSolo ? hostN : [hostN, guestN].filter(Boolean).join(" & ")
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movieTitle, movieUrl]);
+
   useEffect(() => {
     if (playback && (playback.playing || (playback.time || 0) > 0)) setMovieStarted(true);
   }, [playback]);
 
+function scheduleCinemaDismiss() {
+    clearTimeout(cineTimer.current);
+    const reduced = typeof window.matchMedia === "function"
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    cineTimer.current = setTimeout(() => setCinemaIntro(false), reduced ? CINE_INTRO_MS_REDUCED : CINE_INTRO_MS);
+  }
+
 function startMovie() {
     setMovieStarted(true);
+    movieStartAtRef.current = Date.now();
     playerRef.current?.play();
+    // Lights-out cinema start: same cinematic title card on BOTH participants
+    // (movie:start is server-broadcast). Playback is never delayed by it.
+    setCinemaIntro(true);
+    scheduleCinemaDismiss();
+    const vd = playerRef.current && playerRef.current.getVideoData
+      ? playerRef.current.getVideoData()
+      : null;
+    if (vd && vd.title && String(vd.title).toLowerCase() !== "undefined") setMovieTitle(String(vd.title));
   }
 
   // Mirror the server's authoritative {host, guest} ready flags onto local state.
@@ -718,14 +1034,15 @@ function toggleReady() {
   function sendMessage(e) {
     e.preventDefault();
     if (!message.trim()) return;
+    sessionFactsRef.current.chats += 1;
     socket.emit("chat:message", { roomId, message });
     setMessage("");
   }
 
   function sendReaction(reaction) {
+    sessionFactsRef.current.reactions += 1;
     socket.emit("reaction:send", { roomId, reaction });
-    setFloatingReaction({ reaction, id: Date.now() });
-    setTimeout(() => setFloatingReaction(null), 1200);
+    spawnReactionShower(reaction, "self");
   }
 
   function closeFeelingMenu() {
@@ -747,6 +1064,7 @@ function toggleReady() {
   function sendFeeling(value) {
     const text = String(value || "").trim();
     if (!text) return;
+    sessionFactsRef.current.feelings[text] = (sessionFactsRef.current.feelings[text] || 0) + 1;
     socket.emit("feel:send", { roomId, value: text });
     setFeelText("");
     setFeelSent(true);
@@ -781,43 +1099,64 @@ function toggleReady() {
   // blip, …) the socket reconnects on its own; we re-enter the SAME room via
   // room:join (restoring the host slot with asHost when we were the host) and
   // let the existing startPeer / ICE-restart machinery rebuild the call.
-  async function rejoinRoom(rejoinRoomId) {
+  async function rejoinRoom(rejoinRoomId, opts = {}) {
+    const { recover = false } = opts;
     if (rejoinInFlightRef.current) return;
     rejoinInFlightRef.current = true;
     const prevRole = prevRoleRef.current || role;
     rejoinScheduledRef.current = false;
-    console.log(`[socket] rejoin started: room=${rejoinRoomId} role=${prevRole}`);
+    console.log(`[socket] rejoin started: room=${rejoinRoomId} role=${prevRole} recover=${recover}`);
 
-    socket.emit("room:join", {
-      roomId: rejoinRoomId,
-      name: nameRef.current || name || "Guest",
-      asHost: prevRole === "host"
-    }, async (result) => {
-      if (!result?.ok) {
-        const err = result?.error || "unknown";
-        console.log(`[socket] rejoin failed: ${err}`);
+    const attempts = recover ? REJOIN_MAX_ATTEMPTS : 1;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      const result = await new Promise((resolve) => {
+        socket.emit("room:join", {
+          roomId: rejoinRoomId,
+          name: nameRef.current || name || "Guest",
+          asHost: prevRole === "host"
+        }, resolve);
+      });
+
+      if (result?.ok) {
+        const finalName = nameRef.current || name || (result.role === "host" ? "Host" : "Guest");
+        setRole(result.role);
+        setRoomId(result.roomId);
+        roomIdRef.current = result.roomId;
+        setRoomState(result.state);
+        setMovieUrl(result.state?.movieUrl || MOVIE_SRC);
+        setPlayback(result.state?.playback || null);
+        applyReady(result.state?.ready, result.role);
+        partnerLeftHandledRef.current = false;
+        setPartnerLeftAlert(false);
+        writeStoredSession({ roomId: result.roomId, name: finalName, role: result.role, joinedAt: Date.now() });
+        if (recover) {
+          setView("room");
+          window.history.replaceState({}, "", `/room/${result.roomId}`);
+        }
+        console.log("[socket] rejoin succeeded — room:", result.roomId);
+        if (result.role === "host" && result.state?.count === 2) {
+          console.log("[webrtc] re-establishing call as host (offerer)");
+          setTimeout(() => startPeerRef.current?.(true), 60);
+        } else {
+          console.log("[webrtc] rejoin ok — waiting for host offer / restart");
+        }
         rejoinInFlightRef.current = false;
-        backToHome();
         return;
       }
-      setRole(result.role);
-      setRoomId(result.roomId);
-      roomIdRef.current = result.roomId;
-      setRoomState(result.state);
-      setMovieUrl(result.state?.movieUrl || MOVIE_SRC);
-      setPlayback(result.state?.playback || null);
-      applyReady(result.state?.ready, result.role);
-      partnerLeftHandledRef.current = false;
-      setPartnerLeftAlert(false);
-      console.log("[socket] rejoin succeeded — room:", result.roomId);
-      if (result.role === "host" && result.state?.count === 2) {
-        console.log("[webrtc] re-establishing call as host (offerer)");
-        await startPeer(true);
-      } else {
-        console.log("[webrtc] rejoin ok — waiting for host offer / restart");
+
+      const err = result?.error || "unknown";
+      console.log(`[socket] rejoin attempt ${attempt}/${attempts} failed: ${err}`);
+      if (err === "ROOM_FULL" && attempt < attempts) {
+        // The old socket's slot frees itself on the server once it disconnects;
+        // wait a bit before retrying so recovery actually lands.
+        await new Promise((r) => setTimeout(r, REJOIN_BACKOFF_MS * attempt));
+        continue;
       }
       rejoinInFlightRef.current = false;
-    });
+      if (recover) clearStoredSession();
+      backToHome();
+      return;
+    }
   }
 
   function resetRoomUi() {
@@ -832,6 +1171,16 @@ function toggleReady() {
     setFeelToast(null);
     setReadyMe(false);
     setReadyPartner(false);
+    setCinemaIntro(false);
+    setWrapInfo(null);
+    setHangoutMode(false);
+    setShareUrl(null);
+    setShareStatus("");
+    wrapShownRef.current = false;
+    sessionFactsRef.current = { feelings: {}, reactions: 0, chats: 0 };
+    movieStartAtRef.current = 0;
+    clearTimeout(cineTimer.current);
+    clearTimeout(shareTimer.current);
   }
 
   function backToHome() {
@@ -854,6 +1203,7 @@ function toggleReady() {
     window.history.replaceState({}, "", "/");
     hasLeftRef.current = false;
     partnerLeftHandledRef.current = false;
+    clearStoredSession();
   }
 
   function performCleanExit() {
@@ -876,6 +1226,7 @@ function toggleReady() {
     setView("thanks");
     setNotice("");
     window.history.replaceState({}, "", "/");
+    clearStoredSession();
   }
 
   function leaveRoom() {
@@ -912,6 +1263,50 @@ setRoomId("");
     window.history.replaceState({}, "", "/");
     setReadyMe(false);
     setReadyPartner(false);
+    clearStoredSession();
+  }
+
+  function stayTogether() {
+    setWrapInfo(null);
+    setHangoutMode(true);
+    if (isMobileViewport()) { setChatOpen(true); setSidebarOpen(true); }
+  }
+
+  function closeWrap() {
+    setWrapInfo(null);
+    setHangoutMode(false);
+    backToHome();
+  }
+
+  function handleShare() {
+    clearTimeout(shareTimer.current);
+    const info = wrapInfo;
+    if (!info) return;
+    setShareStatus("");
+    const dataUrl = buildShareCard({
+      title: info.title,
+      names: info.solo ? "" : info.names,
+      durationText: info.durationSec > 0 ? fmtDur(info.durationSec) : "",
+      feelings: info.feelings,
+      reactions: info.reactions,
+      chats: info.chats,
+      roomId: roomIdRef.current
+    });
+    if (!dataUrl) {
+      setShareStatus("Couldn't render the card on this device.");
+      return;
+    }
+    setShareUrl(dataUrl);
+    const slug = String(info.title || "movie")
+      .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 22) || "movie-night";
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `callflix-${slug}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setShareStatus("Card saved ✓");
+    shareTimer.current = setTimeout(() => setShareStatus(""), 4000);
   }
 
   function bumpChrome() {
@@ -1000,8 +1395,9 @@ setRoomId("");
       pc.restartIce?.();
       const offer = await pc.createOffer({ iceRestart: true });
       await pc.setLocalDescription(offer);
-      socket.emit("webrtc:offer", { roomId, offer });
-    } catch {
+      socket.emit("webrtc:offer", { roomId: roomIdRef.current, offer });
+    } catch (err) {
+      console.error("[webrtc] renegotiation FAILED:", err && (err.name || "?"), err && err.message);
       // A failed negotiation shouldn't burn a retry budget.
       restartAttempts.current = Math.max(0, restartAttempts.current - 1);
     }
@@ -1278,8 +1674,13 @@ setRoomId("");
     );
   }
 
+  const hostName = roomState?.host?.name || name;
+  const guestName = roomState?.guest?.name || "Waiting…";
+  const seatHostReady = role === "host" ? readyMe : readyPartner;
+  const seatGuestReady = role === "guest" ? readyMe : readyPartner;
+
   return (
-    <main ref={pageRef} className={`room-page ${sidebarOpen ? "" : "chat-closed"}`}>
+    <main ref={pageRef} className={`room-page ${sidebarOpen ? "" : "chat-closed"} ${hangoutMode ? "hangout" : ""}`}>
       <header className="topbar">
         <div className="brand small">
           <svg className="brand-logo" width="30" height="30" viewBox="0 0 24 24" aria-hidden="true">
@@ -1343,13 +1744,42 @@ setRoomId("");
                 roomId={roomId}
                 solo={soloMode}
                 started={movieStarted}
+                onMeta={handleVideoMeta}
+                onEnded={handleMovieEnded}
+                syncHidden={hangoutMode || partnerLeftAlert}
               />
             </div>
 
-{!movieStarted && (
+            {!movieStarted && (
               <div className="scene-topbar">
                 <span className="eyebrow">TONIGHT'S MOVIE</span>
-                <h2 className="scene-title">My Movie</h2>
+                <h2 className="scene-title">{movieTitle || "My Movie"}</h2>
+                {roomState?.count === 2 && <div className="seats-booked">Two seats booked</div>}
+              </div>
+            )}
+
+            {!soloMode && !movieStarted && (
+              <div className="mobile-lobby">
+                <div className="ml-title">{movieTitle || "Tonight's Feature"}</div>
+                <div className="ml-seats">
+                  <div className={`ml-seat${seatHostReady ? " on" : ""}`}>
+                    <b>{hostName || "Host"}</b>
+                    <i>{seatHostReady ? "Ready" : "Seated"}</i>
+                  </div>
+                  <div className={`ml-seat${seatGuestReady ? " on" : ""}`}>
+                    <b>{guestName}</b>
+                    <i>{seatGuestReady ? "Ready" : (roomState?.count === 2 ? "Seated" : "Waiting…")}</i>
+                  </div>
+                </div>
+                {roomState?.count === 2 && (
+                  <button
+                    className={`ready-btn ml-ready${readyMe ? " on" : ""}${readyPartner ? " partner-ready" : ""}`}
+                    onClick={toggleReady}
+                    aria-pressed={readyMe}
+                  >
+                    {readyMe ? "✓ READY" : "READY"}
+                  </button>
+                )}
               </div>
             )}
 
@@ -1436,7 +1866,19 @@ setRoomId("");
                 </div>
               </div>
             )}
-            {floatingReaction && <div className="reaction-float" key={floatingReaction.id}>{floatingReaction.reaction}</div>}
+            {hangoutMode && (
+              <div className="hangout-scrim">
+                <div className="hangout-eyebrow">After-party · still in the room</div>
+              </div>
+            )}
+            {reactionShowers.map((s) => (
+              <div
+                key={s.id}
+                className="reaction-shower"
+                style={{ left: s.x, top: s.y, "--dx": `${s.dx}px`, "--dy": `${s.dy}px` }}
+                aria-hidden="true"
+              >{s.emoji}</div>
+            ))}
               {feelToast && (
                 <div className="feel-toast" key={feelToast.id}>
                   <span className="feel-toast-avatar">{String(feelToast.user || "?").slice(0, 1).toUpperCase()}</span>
@@ -1453,13 +1895,26 @@ setRoomId("");
           <aside className="sidebar">
             {!soloMode && (
               <div className="invite-box">
-                <span className="eyebrow">PRIVATE ROOM</span>
-                <strong>{roomState?.count || 1}/2 participants</strong>
-                <small>
+                <span className="eyebrow">PRIVATE THEATER</span>
+                <strong>{roomState?.count || 1}/2 seats booked</strong>
+                <div className="seats">
+                  <div className={`seat${seatHostReady ? " on" : ""}`}>
+                    <span className="seat-num">01</span>
+                    <span className="seat-name">{hostName || "Host"}</span>
+                    <span className="seat-tag">{seatHostReady ? "Ready" : "Seated"}</span>
+                  </div>
+                  <div className={`seat${seatGuestReady ? " on" : ""}`}>
+                    <span className="seat-num">02</span>
+                    <span className="seat-name">{guestName}</span>
+                    <span className="seat-tag">{seatGuestReady ? "Ready" : (roomState?.count === 2 ? "Seated" : "Waiting…")}</span>
+                  </div>
+                </div>
+                <div className="waiting-row">
+                  <span className="waiting-dot" />
                   {roomState?.count === 2
-                    ? (readyMe || readyPartner) ? "Waiting for your friend..." : "Room is ready"
-                    : "Waiting for your friend..."}
-                </small>
+                    ? ((readyMe || readyPartner) ? "Everyone's here — press READY to roll" : "The movie is cued. Press READY to start")
+                    : "Waiting for your friend…"}
+                </div>
                 {roomState?.count === 2 && !movieStarted && !soloMode && (
                   <button
                     className={`ready-btn${readyMe ? " on" : ""}${readyPartner ? " partner-ready" : ""}`}
@@ -1560,6 +2015,67 @@ setRoomId("");
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
             {unreadMsgs > 0 && <span className="msg-badge">{unreadMsgs > 9 ? "9+" : unreadMsgs}</span>}
           </button>
+        </div>
+      )}
+
+      {cinemaIntro && (
+        <div className="cine-intro" role="presentation" aria-hidden="true">
+          <span className="cine-eyebrow">Tonight's feature</span>
+          <h1 key={movieTitle} className="cine-title">{movieTitle || "My Movie"}</h1>
+          {(roomState?.count === 2) && (
+            <div className="cine-names">
+              <span>{hostName}</span>
+              <i>·</i>
+              <span>{guestName}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {wrapInfo && (
+        <div className="cf-wrap-backdrop">
+          <div className="wrap-card">
+            <span className="eyebrow">That's a wrap</span>
+            <h2 className="wrap-title">{wrapInfo.title}</h2>
+            <div className="wrap-divider" />
+            {!wrapInfo.solo && <div className="wrap-line">Watched together</div>}
+            {wrapInfo.durationSec > 0 && <div className="wrap-stat">{fmtDur(wrapInfo.durationSec)}</div>}
+            {(() => {
+              const feelKeys = wrapInfo.feelings ? Object.keys(wrapInfo.feelings) : [];
+              const feelTotal = feelKeys.reduce((n, k) => n + wrapInfo.feelings[k], 0);
+              const best = feelKeys.reduce((a, k) =>
+                (!a || wrapInfo.feelings[k] > wrapInfo.feelings[a]) ? k : a, null);
+              return (
+                <>
+                  {feelTotal > 0 && (
+                    <div className="wrap-line">{feelTotal} feeling{feelTotal > 1 ? "s" : ""} exchanged</div>
+                  )}
+                  {best && wrapInfo.feelings[best] > 0 && (
+                    <div className="wrap-strong">“{feelingDisplay(best)}”{wrapInfo.feelings[best] > 1 ? ` ×${wrapInfo.feelings[best]}` : ""}</div>
+                  )}
+                  {wrapInfo.reactions > 0 && (
+                    <div className="wrap-line">{wrapInfo.reactions} reaction{wrapInfo.reactions > 1 ? "s" : ""}</div>
+                  )}
+                  {wrapInfo.chats > 1 && (
+                    <div className="wrap-line">{wrapInfo.chats} messages together</div>
+                  )}
+                </>
+              );
+            })()}
+            {wrapInfo.solo && <div className="wrap-line">A solo screening</div>}
+            <p className="wrap-tagline">One more movie night together.</p>
+            {shareUrl && <img className="wrap-share-img" src={shareUrl} alt="Your CALLFLIX share card" />}
+            <div className="wrap-actions">
+              {!wrapInfo.solo && (
+                <button className="primary" onClick={stayTogether} title="Keep the call going">Stay together</button>
+              )}
+              <button className="ghost" onClick={handleShare} title={shareUrl ? "Card already saved to your downloads" : "Generate a share card"}>
+                {shareUrl ? "Save card again" : "Share card"}
+              </button>
+              <button className="ghost" onClick={closeWrap} title="Leave the room">{wrapInfo.solo ? "Done" : "Close"}</button>
+            </div>
+            {shareStatus && <span className="wrap-note">{shareStatus}</span>}
+          </div>
         </div>
       )}
 
