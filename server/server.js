@@ -136,6 +136,22 @@ function publicState(room) {
   };
 }
 
+/* Dedicated Metered TURN account ("CallFlix relay"). It is always served in
+   addition to whatever the legacy TURN_URLS / Twilio config provides, so WebRTC
+   has a second relay when the first one is saturated. Override from the Render
+   dashboard with METERED_TURN_URLS / METERED_TURN_USERNAME /
+   METERED_TURN_CREDENTIAL (they are not secrets: the browser receives them). */
+const METERED_TURN_URLS = (
+  process.env.METERED_TURN_URLS ||
+  "turn:global.relay.metered.ca:80,turn:global.relay.metered.ca:80?transport=tcp,turn:global.relay.metered.ca:443,turns:global.relay.metered.ca:443?transport=tcp"
+).split(",").map((s) => s.trim()).filter(Boolean);
+const METERED_TURN_USERNAME = (process.env.METERED_TURN_USERNAME || "728c78d141dea87d2dc25977").trim();
+const METERED_TURN_CREDENTIAL = (process.env.METERED_TURN_CREDENTIAL || "SjTYHYulk5AjibG2").trim();
+function meteredTurnConfig() {
+  if (!METERED_TURN_USERNAME || !METERED_TURN_CREDENTIAL) return null;
+  return { urls: METERED_TURN_URLS, username: METERED_TURN_USERNAME, credential: METERED_TURN_CREDENTIAL };
+}
+
 /* Twilio Network Traversal Service (NTS) support. Twilio TURN credentials are
    temporally-scoped: username = "<AccountSID>:<expiry-epoch>", password =
    Base64(HMAC-SHA1(AuthToken, username)). Generated fresh on every call, so
@@ -163,6 +179,12 @@ app.get("/health", (_req, res) =>
   res.json({ ok: true, rooms: rooms.size, uptime: Math.round(process.uptime()) })
 );
 
+function withMeteredRelay(iceServers) {
+  const metered = meteredTurnConfig();
+  if (metered) iceServers.push(metered);
+  return iceServers;
+}
+
 function buildIceConfig() {
   const stuns = (process.env.STUN_URLS || "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302,stun:stun.cloudflare.com:3478")
     .split(",").map((s) => s.trim()).filter(Boolean);
@@ -170,7 +192,7 @@ function buildIceConfig() {
 
   if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
     iceServers.push(twilioTurnConfig());
-    return iceServers;
+    return withMeteredRelay(iceServers);
   }
 
   const turnUrls = (process.env.TURN_URLS || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -202,7 +224,7 @@ function buildIceConfig() {
       { urls: "turns:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }
     );
   }
-  return iceServers;
+  return withMeteredRelay(iceServers);
 }
 
 app.get("/api/ice-config", (_req, res) => {
@@ -218,6 +240,9 @@ if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
   console.log(`[ice] Using configured TURN servers (${count} URL(s)) from environment (credentials kept server-side).`);
 } else {
   console.log("[ice] Using built-in demo TURN fallback (openrelay.metered.ca).");
+}
+if (meteredTurnConfig()) {
+  console.log(`[ice] + Metered relay (${METERED_TURN_URLS.length} URL(s), user ${METERED_TURN_USERNAME.slice(0, 6)}…).`);
 }
 
 // Video proxy: re-serves a remote mp4 (MOVIE_SOURCE_URL) with video/mp4 MIME
