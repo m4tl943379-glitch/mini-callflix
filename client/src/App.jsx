@@ -1908,7 +1908,9 @@ setRoomId("");
                 <div className="waiting-row">
                   <span className="waiting-dot" />
                   {roomState?.count === 2
-                    ? ((readyMe || readyPartner) ? "Everyone's here — press READY to roll" : "The movie is cued. Press READY to start")
+                    ? (movieStarted
+                      ? "Now playing — enjoy the movie"
+                      : ((readyMe || readyPartner) ? "Everyone's here — press READY to roll" : "The movie is cued. Press READY to start"))
                     : "Waiting for your friend…"}
                 </div>
                 {roomState?.count === 2 && !movieStarted && !soloMode && (
