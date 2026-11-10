@@ -13,6 +13,20 @@ const PORT = process.env.PORT || 3001;
 const CLIENT_ORIGINS = (process.env.CLIENT_ORIGIN || "http://localhost:5173")
   .split(",").map((s) => s.trim()).filter(Boolean);
 
+/* Every Vercel deployment of this project has its own origin
+   (https://mini-callflix-master-<hash>-<team>.vercel.app) next to the alias
+   https://mini-callflix.vercel.app. CLIENT_ORIGIN can only hold exact values,
+   so opening a deployment/preview URL was blocked by CORS. Accept the whole
+   vercel.app family of this project as well (no cookies or credentials are
+   used, so CORS is not a security boundary here). */
+const VERCEL_PROJECT_ORIGIN = /^https:\/\/mini-callflix(?:-[a-z0-9-]+)*\.vercel\.app$/i;
+function isAllowedOrigin(origin) {
+  if (!origin) return true; // non-browser clients: curl, health checks, Node
+  if (CLIENT_ORIGINS.includes(origin)) return true;
+  return VERCEL_PROJECT_ORIGIN.test(origin);
+}
+const corsOrigin = (origin, callback) => callback(null, isAllowedOrigin(origin));
+
 /* Lightweight .env loader (no dependency): fills process.env from the file next
    to the repo, but never overrides a variable already set by the host (Render
    dashboard vars win — they don't live in a file). */
@@ -30,7 +44,7 @@ try {
 } catch { /* no .env file — fine, pure env-var mode */ }
 
 const app = express();
-app.use(cors({ origin: CLIENT_ORIGINS }));
+app.use(cors({ origin: corsOrigin }));
 
 // Serve a movie placed in public/movie/ (README workflow) with Range support.
 // If the file is absent, requests fall through to the remote proxy below.
@@ -43,7 +57,7 @@ app.use(
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: CLIENT_ORIGINS, methods: ["GET", "POST"] }
+  cors: { origin: corsOrigin, methods: ["GET", "POST"] }
 });
 
 const rooms = new Map();
@@ -483,5 +497,5 @@ function handleDisconnect(socket, explicitLeave) {
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`MINI CALLFLIX signaling server listening on 0.0.0.0:${PORT}`);
-  console.log(`[cors] Allowed origins: ${CLIENT_ORIGINS.join(", ")}`);
+  console.log(`[cors] Allowed origins: ${CLIENT_ORIGINS.join(", ")} (+ https://mini-callflix*.vercel.app)`);
 });
