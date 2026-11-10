@@ -1,0 +1,6 @@
+node_modules
+dist
+public/movie/*.mp4
+*.log
+.env
+.env.*

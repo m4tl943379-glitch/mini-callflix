@@ -10,5 +10,7 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20
+      # Set in the Render dashboard (sync:false): exact Vercel origin,
+      # e.g. https://<project>.vercel.app or your custom domain (never "*").
       - key: CLIENT_ORIGIN
-        value: https://mini-callflix.vercel.app
+        sync: false
