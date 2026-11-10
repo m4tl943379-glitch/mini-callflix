@@ -222,9 +222,10 @@ if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
 
 // Video proxy: re-serves a remote mp4 (MOVIE_SOURCE_URL) with video/mp4 MIME
 // and Range support so the browser <video> can play/seek it directly.
+// Default: "Elemental (2023)" uploaded on the callflix-movie releases.
 const MOVIE_SOURCE_URL =
   process.env.MOVIE_SOURCE_URL ||
-  "https://github.com/m4tl943379-glitch/callflix-movie/releases/download/movie-1/movie.mp4";
+  "https://github.com/m4tl943379-glitch/callflix-movie/releases/download/elemental/movie.mp4";
 
 async function proxyMovie(req, res) {
   try {
