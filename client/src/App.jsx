@@ -403,7 +403,9 @@ function App() {
     if (pathInitRef.current) return;
     pathInitRef.current = true;
     if (!pathRoomId) return;
-    if (readStoredSession()) return;
+    // Same room as the stored session → the recovery effect re-seats us.
+    const session = readStoredSession();
+    if (session && session.roomId === pathRoomId) return;
     setRoomIdInput(pathRoomId);
     setView("join");
   }, [pathRoomId]);
