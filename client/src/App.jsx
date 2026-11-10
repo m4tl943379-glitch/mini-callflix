@@ -150,8 +150,6 @@ function feelingDisplay(value) {
 }
 
 /* ── private-theater first batch helpers ── */
-const CINE_INTRO_MS = 2600;
-const CINE_INTRO_MS_REDUCED = 350;
 const SHOWER_MS = 1400;
 const MAX_SHOWERS = 3;
 
@@ -329,13 +327,11 @@ function App() {
   const [readyPartner, setReadyPartner] = useState(false);
   const feelToastTimer = useRef(null);
   const feelCloseTimer = useRef(null);
-  const cineTimer = useRef(null);
   const shareTimer = useRef(null);
   const movieStartAtRef = useRef(0);
   const wrapShownRef = useRef(false);
   const sessionFactsRef = useRef({ feelings: {}, reactions: 0, chats: 0 });
   const [movieTitle, setMovieTitle] = useState("");
-  const [cinemaIntro, setCinemaIntro] = useState(false);
   const [reactionShowers, setReactionShowers] = useState([]);
   const [wrapInfo, setWrapInfo] = useState(null);
   const [hangoutMode, setHangoutMode] = useState(false);
@@ -509,7 +505,7 @@ function App() {
     wrapShownRef.current = false;
   }, [movieUrl]);
 
-  useEffect(() => () => { clearTimeout(cineTimer.current); clearTimeout(shareTimer.current); }, []);
+  useEffect(() => () => { clearTimeout(shareTimer.current); }, []);
 
   // Reading the chat clears the unread badge.
   useEffect(() => {
@@ -639,7 +635,6 @@ function App() {
       setFeelText("");
       setFeelToast(null);
       setFeelSent(false);
-      setCinemaIntro(false);
       setWrapInfo(null);
       setHangoutMode(false);
       setShareUrl(null);
@@ -647,7 +642,6 @@ function App() {
       wrapShownRef.current = false;
       sessionFactsRef.current = { feelings: {}, reactions: 0, chats: 0 };
       movieStartAtRef.current = 0;
-      clearTimeout(cineTimer.current);
       clearTimeout(shareTimer.current);
       setView("home");
       window.history.replaceState({}, "", "/");
@@ -986,21 +980,10 @@ function App() {
     if (playback && (playback.playing || (playback.time || 0) > 0)) setMovieStarted(true);
   }, [playback]);
 
-function scheduleCinemaDismiss() {
-    clearTimeout(cineTimer.current);
-    const reduced = typeof window.matchMedia === "function"
-      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    cineTimer.current = setTimeout(() => setCinemaIntro(false), reduced ? CINE_INTRO_MS_REDUCED : CINE_INTRO_MS);
-  }
-
 function startMovie() {
     setMovieStarted(true);
     movieStartAtRef.current = Date.now();
     playerRef.current?.play();
-    // Lights-out cinema start: same cinematic title card on BOTH participants
-    // (movie:start is server-broadcast). Playback is never delayed by it.
-    setCinemaIntro(true);
-    scheduleCinemaDismiss();
     const vd = playerRef.current && playerRef.current.getVideoData
       ? playerRef.current.getVideoData()
       : null;
@@ -1186,7 +1169,6 @@ function toggleReady() {
     setFeelToast(null);
     setReadyMe(false);
     setReadyPartner(false);
-    setCinemaIntro(false);
     setWrapInfo(null);
     setHangoutMode(false);
     setShareUrl(null);
@@ -1194,7 +1176,6 @@ function toggleReady() {
     wrapShownRef.current = false;
     sessionFactsRef.current = { feelings: {}, reactions: 0, chats: 0 };
     movieStartAtRef.current = 0;
-    clearTimeout(cineTimer.current);
     clearTimeout(shareTimer.current);
   }
 
@@ -2030,20 +2011,6 @@ setRoomId("");
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
             {unreadMsgs > 0 && <span className="msg-badge">{unreadMsgs > 9 ? "9+" : unreadMsgs}</span>}
           </button>
-        </div>
-      )}
-
-      {cinemaIntro && (
-        <div className="cine-intro" role="presentation" aria-hidden="true">
-          <span className="cine-eyebrow">Tonight's feature</span>
-          <h1 key={movieTitle} className="cine-title">{movieTitle || "My Movie"}</h1>
-          {(roomState?.count === 2) && (
-            <div className="cine-names">
-              <span>{hostName}</span>
-              <i>·</i>
-              <span>{guestName}</span>
-            </div>
-          )}
         </div>
       )}
 
