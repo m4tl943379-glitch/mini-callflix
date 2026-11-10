@@ -159,7 +159,7 @@ function movieDisplayName(url) {
   const u = String(url || "");
   if (!u) return "Tonight's Feature";
   if (/youtube\.|youtu\.be/i.test(u)) return "Tonight's Feature";
-  if (u === MOVIE_SRC || u.includes("/movie/movie.mp4")) return "My Movie";
+  if (u === MOVIE_SRC || u.includes("/movie/movie.mp4")) return "Elemental (2023)";
   return "Tonight's Feature";
 }
 
