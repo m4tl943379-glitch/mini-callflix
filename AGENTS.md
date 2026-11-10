@@ -29,7 +29,7 @@ Vérification syntaxe serveur : `node --check server/server.js`.
 | Variable | Défaut | Usage |
 |---|---|---|
 | `PORT` | 3001 | Port du serveur (Render injecte le sien) |
-| `CLIENT_ORIGIN` | http://localhost:5173 | Origines CORS autorisées (Express + Socket.IO), **liste séparée par virgules** : ex. `https://mini-callflix.vercel.app,http://localhost:5173` (jamais `*`) |
+| `CLIENT_ORIGIN` | http://localhost:5173 | Origines CORS autorisées (Express + Socket.IO), **liste séparée par virgules** : ex. `https://mini-callflix.vercel.app,http://localhost:5173` (jamais `*`). En plus de cette liste, le serveur accepte toujours `https://mini-callflix*.vercel.app` (URLs de déploiement/preview du projet) |
 | `VITE_SERVER_URL` | http://localhost:3001 | URL du serveur Socket.IO **côté client** (à la construction) |
 | `CUSTOM_TURN_URLS` (deprecated : `VITE_TURN_URLS`) | (vide) | Liste `,` de serveurs TURN supplémentaires (`turn:host:port?transport=tcp`) |
 | `STUN_URLS` | Google x2 + Cloudflare + OpenRelay | Liste `,` de serveurs STUN **côté serveur** (`/api/ice-config`) |
@@ -65,7 +65,7 @@ Règles serveur : max 2 participants par room ; les URL de film n'acceptent que 
 
 - Frontend → **Vercel** : import repo, variable build-time `VITE_SERVER_URL` = URL Render, build `npm run build`, output `dist` (câblé par `vercel.json`). Le workflow CI passe `VERCEL_TOKEN` via `env:` et épingler `vercel@59.16.0` (les CLI vercel ≥59 refusent les tokens `vca_` passés par `--token`) ; sinon le step « Deploy to Vercel » échoue sans erreur visible. **`VITE_SERVER_URL` n'est plus codée en dur dans `deploy.yml`** : le workflow lit la **variable de repo GitHub Actions `vars.VITE_SERVER_URL`** et échoue explicitement (fail-fast) si elle est vide — à définir sous Settings → Secrets and variables → Actions → Variables avec l'URL Render exacte. **Secrets** : `VERCEL_TOKEN` (requis) + `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID` (recommandés sur un nouveau compte, récupérables via `vercel link` → `.vercel/project.json`) ; `.vercel/` n'est **plus suivi par git** (ids de compte retirés) pour ne pas coupler le repo à un compte particulier.
 - Serveur → **Render** : Blueprint `render.yaml` (npm install + npm start, health `/health`). WebSockets OK. Free tier : le service s'endort après ~15 min d'inactivité. Le serveur écoute sur `0.0.0.0:$PORT` et `/health` renvoie `{ok, rooms, uptime}` (aucun secret).
-- Vérifier `CLIENT_ORIGIN` sur Render = URL Vercel exacte (liste `,**` possible), sinon CORS bloque le frontend.
+- CORS : `isAllowedOrigin()` (Express + Socket.IO) garde la liste `CLIENT_ORIGIN` et autorise en plus la famille `https://mini-callflix*.vercel.app` — ouvrir une URL de déploiement (`mini-callflix-master-<hash>-<team>.vercel.app`) ou de preview fonctionne donc sans toucher aux variables Render ; une origine étrangère reste refusée (pas de header `Access-Control-Allow-Origin`).
 - **Changement de compte/workspace Render** : le repo ne contient aucune URL Render codée en dur (workflow = `vars.VITE_SERVER_URL`). Transfert : créer le service sur le nouveau compte (même `render.yaml` ou `npm install`/`npm start` + health `/health`), recréer les env vars du tableau ci-dessus, puis mettre à jour `vars.VITE_SERVER_URL` (GitHub) **et** `VITE_SERVER_URL` côté Vercel. `.env.example` documente toutes les variables ; `.env` local reste gitignoré.
 
 ## Limites connues
